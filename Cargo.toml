@@ -1,0 +1,16 @@
+[package]
+name = "props-util"
+version = "0.1.0"
+edition = "2024"
+
+authors = ["dineshadhi <dinesh10c04@gmail.com>"]
+description = "Simple util to extract .properties files in to struct"
+repository = "https://github.com/dineshadhi/props-util.git"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1.0.95"
+quote = "1.0.40"
+syn = "2.0.100"
