@@ -4,8 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 authors = ["dineshadhi <dinesh10c04@gmail.com>"]
-description = "Simple util to extract .properties files in to struct"
+readme = "README.md"
+description = "A Rust library for easily loading and parsing properties files into strongly-typed structs."
 repository = "https://github.com/dineshadhi/props-util.git"
+keywords = ["util", "properties", "proc-macro"]
+categories = ["util"]
 
 [lib]
 proc-macro = true
