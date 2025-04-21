@@ -43,7 +43,7 @@ fn generate_initalizers(fields: Punctuated<Field, Comma>) -> syn::Result<Vec<pro
             None => quote! {
                 match propmap.get(#key).map(String::as_str) {
                     Some(val) => val,
-                    None => return Err(Error::new_spanned(field, format!("`{}` value is not configured. Use default or set it in the .properties file", #key))),
+                    None => return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("`{}` value is not configured. Use default or set it in the .properties file", #key)))
                 }
             },
         };
@@ -73,6 +73,7 @@ fn generate_prop_fns(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStrea
             use std::fs;
             use std::io::{self, ErrorKind}; // Explicitly import ErrorKind
             use std::path::Path; // Required for AsRef<Path> trait bound
+            use std::{fs::File, io::Read};
 
             let mut content = String::new();
 
