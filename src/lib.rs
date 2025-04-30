@@ -98,7 +98,8 @@ fn generate_prop_fns(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStrea
             Ok(Self { #( #init_arr ),* })
         }
 
-        pub fn from_hash_map(propmap : &std::collections::HashMap<String, String>) -> std::io::Result<Self> {
+        pub fn from_hash_map(propmap : &std::collections::HashMap<&str, &str>) -> std::io::Result<Self> {
+            let propmap : HashMap<String, String> = propmap.iter().map(|(k, v)| (k.trim().to_string(), v.trim().to_string())).collect();
             Ok(Self { #( #init_arr ),* })
         }
 

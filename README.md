@@ -103,20 +103,20 @@ This will use the default values specified in the `#[prop]` attributes.
 
 ### Initialization from HashMap
 
-You can also create an instance directly from a `std::collections::HashMap<String, String>`:
+You can also create an instance directly from a `std::collections::HashMap<&str, &str>`:
 
 ```rust
 use std::collections::HashMap;
 
 let mut props = HashMap::new();
-props.insert("server.host".to_string(), "192.168.1.100".to_string());
-props.insert("server.port".to_string(), "9999".to_string());
-props.insert("debug.enabled".to_string(), "true".to_string());
+props.insert("server.host", "192.168.1.100");
+props.insert("server.port", "9999");
+props.insert("debug.enabled", "true");
 
 let config = Config::from_hash_map(&props)?;
 ```
 
-This method is useful if you already have the configuration data in a HashMap, for example, loaded from a different source or constructed dynamically. Property keys and values are expected to be strings, and type conversion and default values work the same way as `from_file`.
+This method is useful if you already have the configuration data in a HashMap, for example, loaded from a different source or constructed dynamically. Property keys and values are expected to be string slices (`&str`), and type conversion and default values work the same way as `from_file`.
 
 ## Advanced Example
 
