@@ -45,6 +45,16 @@ struct DefaultableTestConfig {
     missing_required: String,
 }
 
+// Test struct for Vec parsing
+#[derive(Properties, Debug, PartialEq)]
+struct VecTestConfig {
+    #[prop(key = "numbers", default = "1,2,3")]
+    numbers: Vec<i32>,
+    #[prop(key = "strings", default = "hello,world")]
+    strings: Vec<String>,
+    #[prop(key = "required_vec")] // Required
+    required_vec: Vec<u64>,
+}
 // --- Test Functions ---
 
 #[test]
@@ -57,7 +67,7 @@ fn test_from_file_success() {
     assert_eq!(config.dept, "Engineering");
     assert_eq!(config.empid, 123);
     assert_eq!(config.numeric, 456);
-    assert_eq!(config.boolean, true);
+    assert!(config.boolean);
     assert_eq!(config.spaced, "spaced value");
     assert_eq!(config.missing_default, "DefaultValue");
     // Adjust this expected value based on your examples/test.properties file
@@ -79,7 +89,7 @@ fn test_default_initialization() {
     assert_eq!(config.dept, "DefaultDept");
     assert_eq!(config.empid, 0);
     assert_eq!(config.numeric, 999);
-    assert_eq!(config.boolean, false);
+    assert!(!config.boolean);
     assert_eq!(config.spaced, "");
     assert_eq!(config.missing_default, "DefaultValue");
     assert_eq!(config.missing_required, "DefaultRequiredValue");
@@ -102,7 +112,7 @@ fn test_from_hash_map_success() {
     assert_eq!(config.dept, "DeptFromMap");
     assert_eq!(config.empid, 54321);
     assert_eq!(config.numeric, -100);
-    assert_eq!(config.boolean, true);
+    assert!(config.boolean);
     assert_eq!(config.spaced, "spaced map value");
     assert_eq!(config.missing_default, "DefaultValue"); // Default used
     assert_eq!(config.missing_required, "map_provided");
@@ -121,7 +131,7 @@ fn test_from_hash_map_uses_defaults() {
     assert_eq!(config.dept, "DeptForDefaults"); // Provided
     assert_eq!(config.empid, 0); // Default
     assert_eq!(config.numeric, 999); // Default
-    assert_eq!(config.boolean, false); // Default
+    assert!(!config.boolean); // Default
     assert_eq!(config.spaced, ""); // Default
     assert_eq!(config.missing_default, "DefaultValue"); // Default
     assert_eq!(config.missing_required, "RequiredForDefaults"); // Provided
@@ -153,4 +163,40 @@ fn test_from_hash_map_parse_error() {
     assert!(result.is_err());
     // Optionally check the error message
     // assert!(result.err().unwrap().to_string().contains("Failed to parse value"));
+}
+
+#[test]
+fn test_vec_parsing() {
+    let mut props = std::collections::HashMap::new();
+    props.insert("numbers", "4,5,6,7");
+    props.insert("strings", "test,vec,parsing");
+    props.insert("required_vec", "10,20,30");
+
+    let config = VecTestConfig::from_hash_map(&props).expect("from_hash_map failed");
+
+    assert_eq!(config.numbers, vec![4, 5, 6, 7]);
+    assert_eq!(config.strings, vec!["test".to_string(), "vec".to_string(), "parsing".to_string()]);
+    assert_eq!(config.required_vec, vec![10, 20, 30]);
+}
+
+#[test]
+fn test_vec_defaults() {
+    let mut props = std::collections::HashMap::new();
+    props.insert("required_vec", "1,2,3");
+
+    let config = VecTestConfig::from_hash_map(&props).expect("from_hash_map failed");
+
+    assert_eq!(config.numbers, vec![1, 2, 3]); // Default value
+    assert_eq!(config.strings, vec!["hello".to_string(), "world".to_string()]); // Default value
+    assert_eq!(config.required_vec, vec![1, 2, 3]);
+}
+
+#[test]
+fn test_vec_parse_error() {
+    let mut props = std::collections::HashMap::new();
+    props.insert("numbers", "1,invalid,3");
+    props.insert("required_vec", "1,2,3");
+
+    let result = VecTestConfig::from_hash_map(&props);
+    assert!(result.is_err());
 }

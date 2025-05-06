@@ -78,7 +78,27 @@ Props-Util supports any type that implements `FromStr`. This includes:
 - `String`
 - Numeric types (`u8`, `u16`, `u32`, `u64`, `i8`, `i16`, `i32`, `i64`, `f32`, `f64`)
 - Boolean (`bool`)
+- `Vec<T>` where `T` implements `FromStr` (values are comma-separated in the properties file)
 - Custom types that implement `FromStr`
+
+Example of using Vec types:
+
+```rust
+#[derive(Properties, Debug)]
+struct Config {
+    #[prop(key = "numbers", default = "1,2,3")]
+    numbers: Vec<i32>,
+    
+    #[prop(key = "strings", default = "hello,world")]
+    strings: Vec<String>,
+}
+```
+
+In the properties file:
+```properties
+numbers=4,5,6,7
+strings=test,vec,parsing
+```
 
 ### Error Handling
 

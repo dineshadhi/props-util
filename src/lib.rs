@@ -48,14 +48,32 @@ fn generate_initalizers(fields: Punctuated<Field, Comma>) -> syn::Result<Vec<pro
             },
         };
 
-        let init = quote! {
-             #field_name : {
+        let mut init = quote! {
+            #field_name : {
                 let raw_value_str = #raw_value_str;
                 raw_value_str.parse::<#field_type>().map_err(|e|
                     std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Error Parsing `{}` with value `{}` {}", #key, raw_value_str, e))
                 )?
             }
         };
+
+        if let syn::Type::Path(tpath) = field_type {
+            if tpath.path.segments.last().is_some_and(|segment| segment.ident == "Vec") {
+                init = quote! {
+                    #field_name : {
+                        let raw_value_str = #raw_value_str;
+                        raw_value_str.split(',')
+                            .map(|s| s.trim())
+                            .filter(|s| !s.is_empty())
+                            .map(|s| s.parse::<_>().map_err(|e|
+                                std::io::Error::new(std::io::ErrorKind::InvalidData,
+                                    format!("Error Parsing `{}` with value `{}` {}", #key, s, e))
+                            ))
+                            .collect::<std::io::Result<Vec<_>>>()?
+                    }
+                }
+            }
+        }
 
         init_arr.push(init);
     }
@@ -110,7 +128,7 @@ fn generate_prop_fns(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStrea
         }
     };
 
-    Ok(proc_macro2::TokenStream::from(new_impl))
+    Ok(new_impl)
 }
 
 fn parse_key_default(field: &syn::Field) -> syn::Result<(LitStr, Option<LitStr>)> {
