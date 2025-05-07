@@ -81,7 +81,7 @@ Props-Util supports any type that implements `FromStr`. This includes:
 - `Vec<T>` where `T` implements `FromStr` (values are comma-separated in the properties file)
 - Custom types that implement `FromStr`
 
-Example of using Vec types:
+### Example of using Vec types:
 
 ```rust
 #[derive(Properties, Debug)]
@@ -164,6 +164,15 @@ struct AppConfig {
 
     #[prop(key = "logging.file", default = "app.log")]
     log_file: String,
+
+    #[prop(key = "allowed_ips", default = "127.0.0.1,192.168.1.1")]
+    allowed_ips: Vec<String>,
+
+    #[prop(key = "ports", default = "80,443,8080")]
+    ports: Vec<u16>,
+
+    #[prop(key = "enabled_features")] // Required
+    enabled_features: Vec<String>,
 }
 ```
 
@@ -191,6 +200,13 @@ database.pool_size=20
 # Logging settings
 logging.level=debug
 logging.file=debug.log
+
+# Network settings
+allowed_ips=10.0.0.1,10.0.0.2,192.168.0.1
+ports=80,443,8080,8443
+
+# Features
+enabled_features=ssl,compression,caching
 ```
 
 ## Limitations
