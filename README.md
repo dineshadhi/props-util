@@ -1,5 +1,5 @@
 [![crates.io](https://img.shields.io/crates/v/props-util)](https://crates.io/crates/props-util)
-[![docs.rs]("https://docs.rs/props-util/latest/props_util")](https://docs.rs/props-util/)
+[![docs.rs](https://docs.rs/props-util/latest/props_util)](https://docs.rs/props-util/)
 
 # Props-Util
 
