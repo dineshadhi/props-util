@@ -62,6 +62,8 @@ struct VecTestConfig {
     strings: Vec<String>,
     #[prop(key = "required_vec")] // Required
     required_vec: Vec<u64>,
+    #[prop(key = "option_vec")]
+    option_vec: Option<Vec<u16>>,
 }
 // --- Test Functions ---
 
@@ -196,6 +198,11 @@ fn test_vec_parsing() {
     assert_eq!(config.numbers, vec![4, 5, 6, 7]);
     assert_eq!(config.strings, vec!["test".to_string(), "vec".to_string(), "parsing".to_string()]);
     assert_eq!(config.required_vec, vec![10, 20, 30]);
+    assert_eq!(config.option_vec, None);
+
+    props.insert("option_vec", "10,20,30");
+    let config = VecTestConfig::from_hash_map(&props).expect("from_hash_map failed");
+    assert_eq!(config.option_vec, Some(vec![10, 20, 30]));
 }
 
 #[test]

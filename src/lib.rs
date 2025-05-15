@@ -30,50 +30,35 @@ fn extract_named_fields(input: &DeriveInput) -> syn::Result<Punctuated<Field, Co
     Ok(fields.to_owned())
 }
 
-fn generate_result_quote(field_type: &syn::Type, field_name: &proc_macro2::Ident, raw_value_str: proc_macro2::TokenStream, key: LitStr) -> proc_macro2::TokenStream {
+fn generate_result_quote(field_type: &syn::Type, field_name: &proc_macro2::Ident, raw_value_str: proc_macro2::TokenStream, key: LitStr, is_option: bool) -> proc_macro2::TokenStream {
     match field_type {
-        syn::Type::Path(tpath) if tpath.path.segments.last().is_some_and(|segment| segment.ident == "Vec") => {
-            quote! {
-                #field_name : {
-                    let raw_value_str = match #raw_value_str {
-                        Some(val) => val,
-                        None => return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("`{}` value is not configured. Use default or set it in the .properties file", #key)))
-                    };
-                    Self::parse_vec::<_>(raw_value_str).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Error Parsing `{}` with value `{}` {}", #key, raw_value_str, e)))?
-                }
-            }
-        }
-        _ => quote! {
-            #field_name : {
-                let raw_value_str = match #raw_value_str {
-                    Some(val) => val,
+        syn::Type::Path(tpath) if tpath.path.segments.last().is_some_and(|segment| segment.ident == "Vec") => match is_option {
+            false => quote! {
+                #field_name : match #raw_value_str {
+                    Some(val) => Self::parse_vec::<_>(val).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Error Parsing `{}` with value `{}` {}", #key, val, e)))?,
                     None => return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("`{}` value is not configured. Use default or set it in the .properties file", #key)))
-                };
-                Self::parse(raw_value_str) .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Error Parsing `{}` with value `{}` {}", #key, raw_value_str, e)) )?
-            }
-        },
-    }
-}
-
-fn generate_option_quote(field_type: &syn::Type, field_name: &proc_macro2::Ident, raw_value_str: proc_macro2::TokenStream, key: LitStr) -> proc_macro2::TokenStream {
-    match field_type {
-        syn::Type::Path(tpath) if tpath.path.segments.last().is_some_and(|segment| segment.ident == "Vec") => {
-            quote! {
-                #field_name : {
-                    match #raw_value_str {
-                        Some(val) => Some(Self::parse_vec::<_>(val).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Error Parsing `{}` with value `{}` {}", #key, val, e)))?),
-                        None => None
-                    }
                 }
-            }
-        }
-        _ => quote! {
-            #field_name : {
-                match #raw_value_str {
+            },
+            true => quote! {
+                #field_name : match #raw_value_str {
+                    Some(val) => Some(Self::parse_vec::<_>(val).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Error Parsing `{}` with value `{}` {}", #key, val, e)))?),
+                    None => None
+                }
+            },
+        },
+        _ => match is_option {
+            false => quote! {
+                #field_name : match #raw_value_str {
+                    Some(val) => Self::parse(val).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Error Parsing `{}` with value `{}` {}", #key, val, e)))?,
+                    None => return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("`{}` value is not configured. Use default or set it in the .properties file", #key)))
+                }
+            },
+            true => quote! {
+                #field_name : match #raw_value_str {
                     Some(val) => Some(Self::parse(val).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Error Parsing `{}` with value `{}` {}", #key, val, e)))?),
                     None => None
                 }
-            }
+            },
         },
     }
 }
@@ -94,12 +79,12 @@ fn generate_initalizers(fields: Punctuated<Field, Comma>) -> syn::Result<Vec<pro
         let init = match field_type {
             syn::Type::Path(tpath) if tpath.path.segments.last().is_some_and(|segment| segment.ident == "Option") => match tpath.path.segments.last().unwrap().to_owned().arguments {
                 syn::PathArguments::AngleBracketed(arguments) if arguments.args.first().is_some() => match arguments.args.first().unwrap() {
-                    syn::GenericArgument::Type(ftype) => generate_option_quote(ftype, field_name, raw_value_str, key),
+                    syn::GenericArgument::Type(ftype) => generate_result_quote(ftype, field_name, raw_value_str, key, true),
                     _ => panic!("Option not configured {field_name} properly"),
                 },
                 _ => panic!("Option not configured {field_name} properly"),
             },
-            _ => generate_result_quote(field_type, field_name, raw_value_str, key),
+            _ => generate_result_quote(field_type, field_name, raw_value_str, key, false),
         };
 
         init_arr.push(init);
