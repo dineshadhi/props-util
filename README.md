@@ -82,9 +82,10 @@ Props-Util supports any type that implements `FromStr`. This includes:
 - Numeric types (`u8`, `u16`, `u32`, `u64`, `i8`, `i16`, `i32`, `i64`, `f32`, `f64`)
 - Boolean (`bool`)
 - `Vec<T>` where `T` implements `FromStr` (values are comma-separated in the properties file)
+- `Option<T>` where `T` implements `FromStr` (optional fields that may or may not be present in the properties file)
 - Custom types that implement `FromStr`
 
-### Example of using Vec types:
+### Example of using Vec and Option types:
 
 ```rust
 #[derive(Properties, Debug)]
@@ -94,6 +95,12 @@ struct Config {
     
     #[prop(key = "strings", default = "hello,world")]
     strings: Vec<String>,
+
+    #[prop(key = "optional_port")]  // No default needed for Option
+    optional_port: Option<u16>,
+
+    #[prop(key = "optional_host")]  // No default needed for Option
+    optional_host: Option<String>,
 }
 ```
 
@@ -101,6 +108,8 @@ In the properties file:
 ```properties
 numbers=4,5,6,7
 strings=test,vec,parsing
+optional_port=9090
+# optional_host is not set, so it will be None
 ```
 
 ### Error Handling
@@ -176,6 +185,9 @@ struct AppConfig {
 
     #[prop(key = "enabled_features")] // Required
     enabled_features: Vec<String>,
+
+    #[prop(key = "optional_ssl_port")] // Optional field
+    optional_ssl_port: Option<u16>,
 }
 ```
 
@@ -210,6 +222,9 @@ ports=80,443,8080,8443
 
 # Features
 enabled_features=ssl,compression,caching
+
+# Optional settings
+optional_ssl_port=8443
 ```
 
 ## Limitations
@@ -218,4 +233,3 @@ enabled_features=ssl,compression,caching
 - All fields must have the `#[prop]` attribute
 - The `key` parameter is required for all fields
 - Properties files must use the `key=value` format
-
