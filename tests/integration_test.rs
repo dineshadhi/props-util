@@ -4,7 +4,7 @@
 use props_util::Properties;
 // Define the struct(s) used for testing within the integration test file
 // This struct can now correctly use the Properties macro from the crate.
-#[derive(Properties, Debug, PartialEq)]
+#[derive(Properties, Debug, PartialEq, Clone)]
 struct TestConfig {
     #[prop(key = "name", default = "DefaultName")]
     name: String,
@@ -29,7 +29,7 @@ struct TestConfig {
 }
 
 // Helper struct for default test where all fields need defaults
-#[derive(Properties, Debug, PartialEq)]
+#[derive(Properties, Debug, PartialEq, Clone)]
 struct DefaultableTestConfig {
     #[prop(key = "name", default = "DefaultName")]
     name: String,
@@ -116,14 +116,14 @@ fn test_default_initialization() {
 #[test]
 fn test_from_hash_map_success() {
     let mut props = std::collections::HashMap::new();
-    props.insert("name", "NameFromMap");
-    props.insert("dept", "DeptFromMap"); // Required
-    props.insert("id", "54321");
-    props.insert("numeric_test", "-100");
-    props.insert("bool_test", "true");
-    props.insert("spaced.key", " spaced map value ");
-    props.insert("missing_required", "map_provided"); // Required
-    props.insert("option_with_numbers", "4,5,6");
+    props.insert("name".to_string(), "NameFromMap".to_string());
+    props.insert("dept".to_string(), "DeptFromMap".to_string()); // Required
+    props.insert("id".to_string(), "54321".to_string());
+    props.insert("numeric_test".to_string(), "-100".to_string());
+    props.insert("bool_test".to_string(), "true".to_string());
+    props.insert("spaced.key".to_string(), " spaced map value ".to_string());
+    props.insert("missing_required".to_string(), "map_provided".to_string()); // Required
+    props.insert("option_with_numbers".to_string(), "4,5,7".to_string());
 
     let config = TestConfig::from_hash_map(&props).expect("from_hash_map failed");
 
@@ -136,15 +136,29 @@ fn test_from_hash_map_success() {
     assert_eq!(config.missing_default, "DefaultValue"); // Default used
     assert_eq!(config.missing_required, "map_provided");
     assert_eq!(config.option_with_none, None);
-    assert_eq!(config.option_with_numbers, Some(vec![4, 5, 6]));
+    assert_eq!(config.option_with_numbers, Some(vec![4, 5, 7]));
+
+    let hm = config.clone().into_hash_map();
+    let config = TestConfig::from_hash_map(&hm).unwrap();
+
+    assert_eq!(config.name, "NameFromMap");
+    assert_eq!(config.dept, "DeptFromMap");
+    assert_eq!(config.empid, 54321);
+    assert_eq!(config.numeric, -100);
+    assert!(config.boolean);
+    assert_eq!(config.spaced, "spaced map value");
+    assert_eq!(config.missing_default, "DefaultValue"); // Default used
+    assert_eq!(config.missing_required, "map_provided");
+    assert_eq!(config.option_with_none, None);
+    assert_eq!(config.option_with_numbers, Some(vec![4, 5, 7]));
 }
 
 #[test]
 fn test_from_hash_map_uses_defaults() {
     let mut props = std::collections::HashMap::new();
     // Provide only the required fields (those without defaults in TestConfig)
-    props.insert("dept", "DeptForDefaults");
-    props.insert("missing_required", "RequiredForDefaults");
+    props.insert("dept".to_string(), "DeptForDefaults".to_string());
+    props.insert("missing_required".to_string(), "RequiredForDefaults".to_string());
 
     let config = TestConfig::from_hash_map(&props).expect("from_hash_map (defaults) failed");
 
@@ -161,10 +175,10 @@ fn test_from_hash_map_uses_defaults() {
 #[test]
 fn test_from_hash_map_missing_required() {
     let mut props = std::collections::HashMap::new();
-    props.insert("name", "NameFromMap");
+    props.insert("name".to_string(), "NameFromMap".to_string());
     // "dept" is required in TestConfig and is missing
-    props.insert("id", "54321");
-    props.insert("missing_required", "provided"); // This one is provided
+    props.insert("id".to_string(), "54321".to_string());
+    props.insert("missing_required".to_string(), "provided".to_string()); // This one is provided
 
     let result = TestConfig::from_hash_map(&props);
     assert!(result.is_err());
@@ -175,10 +189,10 @@ fn test_from_hash_map_missing_required() {
 #[test]
 fn test_from_hash_map_parse_error() {
     let mut props = std::collections::HashMap::new();
-    props.insert("name", "NameFromMap");
-    props.insert("dept", "DeptFromMap");
-    props.insert("id", "not_a_number"); // Invalid u32
-    props.insert("missing_required", "provided");
+    props.insert("name".to_string(), "NameFromMap".to_string());
+    props.insert("dept".to_string(), "DeptFromMap".to_string());
+    props.insert("id".to_string(), "not_a_number".to_string()); // Invalid u32
+    props.insert("missing_required".to_string(), "provided".to_string());
 
     let result = TestConfig::from_hash_map(&props);
     assert!(result.is_err());
@@ -189,9 +203,9 @@ fn test_from_hash_map_parse_error() {
 #[test]
 fn test_vec_parsing() {
     let mut props = std::collections::HashMap::new();
-    props.insert("numbers", "4,5,6,7");
-    props.insert("strings", "test,vec,parsing");
-    props.insert("required_vec", "10,20,30");
+    props.insert("numbers".to_string(), "4,5,6,7".to_string());
+    props.insert("strings".to_string(), "test,vec,parsing".to_string());
+    props.insert("required_vec".to_string(), "10,20,30".to_string());
 
     let config = VecTestConfig::from_hash_map(&props).expect("from_hash_map failed");
 
@@ -200,7 +214,7 @@ fn test_vec_parsing() {
     assert_eq!(config.required_vec, vec![10, 20, 30]);
     assert_eq!(config.option_vec, None);
 
-    props.insert("option_vec", "10,20,30");
+    props.insert("option_vec".to_string(), "10,20,30".to_string());
     let config = VecTestConfig::from_hash_map(&props).expect("from_hash_map failed");
     assert_eq!(config.option_vec, Some(vec![10, 20, 30]));
 }
@@ -208,7 +222,7 @@ fn test_vec_parsing() {
 #[test]
 fn test_vec_defaults() {
     let mut props = std::collections::HashMap::new();
-    props.insert("required_vec", "1,2,3");
+    props.insert("required_vec".to_string(), "1,2,3".to_string());
 
     let config = VecTestConfig::from_hash_map(&props).expect("from_hash_map failed");
 
@@ -220,8 +234,8 @@ fn test_vec_defaults() {
 #[test]
 fn test_vec_parse_error() {
     let mut props = std::collections::HashMap::new();
-    props.insert("numbers", "1,invalid,3");
-    props.insert("required_vec", "1,2,3");
+    props.insert("numbers".to_string(), "1,invalid,3".to_string());
+    props.insert("required_vec".to_string(), "1,2,3".to_string());
 
     let result = VecTestConfig::from_hash_map(&props);
     assert!(result.is_err());
