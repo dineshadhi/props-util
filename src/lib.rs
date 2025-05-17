@@ -15,6 +15,7 @@
 //! - Type conversion from string to your struct's field types
 //! - Error handling for missing or malformed properties
 //! - Support for both file-based and default initialization
+//! - Type conversion between different configuration types
 //!
 //! ## Usage
 //!
@@ -101,45 +102,14 @@
 //! }
 //! ```
 //!
-//! ### Converting to and from HashMap
-//!
-//! You can convert your struct to a HashMap using the `into_hash_map` method:
-//!
-//! ```rust
-//! use props_util::Properties;
-//! use std::io::Result;
-//! use std::collections::HashMap;
-//!
-//! #[derive(Properties, Debug)]
-//! struct Config {
-//!     #[prop(key = "server.host", default = "localhost")]
-//!     host: String,
-//!     #[prop(key = "server.port", default = "8080")]
-//!     port: u16,
-//! }
-//!
-//! fn main() -> Result<()> {
-//!     let mut props = HashMap::new();
-//!     props.insert("server.host".to_string(), "192.168.1.100".to_string());
-//!     props.insert("server.port".to_string(), "9999".to_string());
-//!
-//!     let config = Config::from_hash_map(&props)?;
-//!     let hashmap = config.into_hash_map();
-//!     println!("Host: {}", hashmap.get("server.host").unwrap());
-//!     println!("Port: {}", hashmap.get("server.port").unwrap());
-//!     Ok(())
-//! }
-//! ```
-//!
 //! ### Converting Between Different Types
 //!
-//! You can use `into_hash_map` to convert between different configuration types. This is particularly useful
+//! You can use the `from` function to convert between different configuration types. This is particularly useful
 //! when you have multiple structs that share similar configuration fields but with different types or structures:
 //!
 //! ```rust
 //! use props_util::Properties;
 //! use std::io::Result;
-//! use std::collections::HashMap;
 //!
 //! #[derive(Properties, Debug)]
 //! struct ServerConfig {
@@ -158,27 +128,15 @@
 //! }
 //!
 //! fn main() -> Result<()> {
-//!     // Create a temporary file for testing
-//!     let temp_file = tempfile::NamedTempFile::new()?;
-//!     std::fs::write(&temp_file, "host=example.com\nport=9090")?;
-//!     
-//!     // Convert from ServerConfig to ClientConfig
-//!     let server_config = ServerConfig::from_file(temp_file.path().to_str().unwrap())?;
-//!     let hashmap = server_config.into_hash_map();
-//!     let client_config = ClientConfig::from_hash_map(&hashmap)?;
-//!     
+//!     let server_config = ServerConfig::default()?;
+//!     let client_config = ClientConfig::from(server_config)?;
 //!     println!("Server host: {}", client_config.server_host);
 //!     println!("Server port: {}", client_config.server_port);
 //!     Ok(())
 //! }
 //! ```
 //!
-//! > **Important**: When converting between types using `into_hash_map`, the `key` attribute values must match between the source and target types. If no `key` is specified, the field names must match. This ensures that the configuration values are correctly mapped between the different types.
-//!
-//! This approach is useful when:
-//! - You need to migrate between different configuration formats
-//! - You have multiple applications that share configuration but use different struct layouts
-//! - You want to transform configuration between different versions of your application
+//! > **Important**: When converting between types using `from`, the `key` attribute values must match between the source and target types. If no `key` is specified, the field names must match. This ensures that the configuration values are correctly mapped between the different types.
 //!
 //! ### Error Handling
 //!
@@ -256,7 +214,6 @@
 //! - Only named structs are supported (not tuple structs or enums)
 //! - All fields must have the `#[prop]` attribute
 //! - Properties files must use the `key=value` format
-//! - When using `from_hash_map`, both keys and values must be of type `String`
 
 extern crate proc_macro;
 
@@ -268,8 +225,7 @@ use syn::{DeriveInput, Error, Field, LitStr, parse_macro_input, punctuated::Punc
 ///
 /// This macro generates implementations for:
 /// - `from_file`: Load properties from a file
-/// - `from_hash_map`: Create instance from a HashMap
-/// - `into_hash_map`: Convert instance to a HashMap
+/// - `from`: Create instance from a type that implements Into<HashMap<String, String>>
 /// - `default`: Create instance with default values
 ///
 /// # Example
@@ -301,6 +257,12 @@ pub fn parse_prop_derive(input: TokenStream) -> TokenStream {
     match generate_prop_fns(&input) {
         Ok(prop_impl) => quote! {
             impl #struct_name { #prop_impl }
+
+            impl std::convert::Into<std::collections::HashMap<String, String>> for #struct_name {
+                fn into(self) -> std::collections::HashMap<String, String> {
+                    self.into_hash_map()
+                }
+            }
         }
         .into(),
         Err(e) => e.to_compile_error().into(),
@@ -465,6 +427,34 @@ fn generate_prop_fns(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStrea
             Ok(string.parse::<T>().map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Error Parsing with value `{string}`")))?)
         }
 
+        /// Loads properties from a file into an instance of this struct.
+        ///
+        /// # Example
+        ///
+        /// ```rust
+        /// use props_util::Properties;
+        /// use std::io::Result;
+        ///
+        /// #[derive(Properties, Debug)]
+        /// struct Config {
+        ///     #[prop(key = "server.host", default = "localhost")]
+        ///     host: String,
+        ///
+        ///     #[prop(key = "server.port", default = "8080")]
+        ///     port: u16,
+        ///
+        ///     #[prop(key = "debug.enabled", default = "false")]
+        ///     debug: bool,
+        /// }
+        ///
+        /// fn main() -> Result<()> {
+        ///     let config = Config::from_file("config.properties")?;
+        ///     println!("Server: {}:{}", config.host, config.port);
+        ///     println!("Debug mode: {}", config.debug);
+        ///     Ok(())
+        /// }
+        /// ```
+        ///
         pub fn from_file(path : &str) -> std::io::Result<Self> {
             use std::collections::HashMap;
             use std::fs;
@@ -495,16 +485,55 @@ fn generate_prop_fns(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStrea
             Ok(Self { #( #init_arr ),* })
         }
 
-        pub fn from_hash_map(propmap : &std::collections::HashMap<String, String>) -> std::io::Result<Self> {
-            let propmap : std::collections::HashMap<String, String> = propmap.iter().map(|(k, v)| (k.trim().to_string(), v.trim().to_string())).collect();
-            Ok(Self { #( #init_arr ),* })
-        }
-
-        pub fn into_hash_map(self) -> std::collections::HashMap<String, String> {
+        fn into_hash_map(self) -> std::collections::HashMap<String, String> {
             use std::collections::HashMap;
             let mut hm = HashMap::<String, String>::new();
             #( #ht_arr )*
             hm
+        }
+
+        /// Convert from another type that implements `Properties` into this type.
+        ///
+        /// This function uses `into_hash_map` internally to perform the conversion.
+        /// The conversion will succeed only if the source type's keys match this type's keys. All the required keys must be present in the source type.
+        /// 
+        /// 
+        /// # Example
+        ///
+        /// ```rust
+        /// use props_util::Properties;
+        /// use std::io::Result;
+        ///
+        /// #[derive(Properties, Debug)]
+        /// struct ServerConfig {
+        ///     #[prop(key = "host", default = "localhost")]
+        ///     host: String,
+        ///     #[prop(key = "port", default = "8080")]
+        ///     port: u16,
+        /// }
+        ///
+        /// #[derive(Properties, Debug)]
+        /// struct ClientConfig {
+        ///     #[prop(key = "host", default = "localhost")]  // Note: using same key as ServerConfig
+        ///     server_host: String,
+        ///     #[prop(key = "port", default = "8080")]      // Note: using same key as ServerConfig
+        ///     server_port: u16,
+        /// }
+        ///
+        /// fn main() -> Result<()> {
+        ///     let server_config = ServerConfig::default()?;
+        ///     let client_config = ClientConfig::from(server_config)?;
+        ///     println!("Server host: {}", client_config.server_host);
+        ///     println!("Server port: {}", client_config.server_port);
+        ///     Ok(())
+        /// }
+        /// ```
+        pub fn from<T>(other: T) -> std::io::Result<Self>
+        where
+            T: Into<std::collections::HashMap<String, String>>
+        {
+            let propmap = other.into();
+            Ok(Self { #( #init_arr ),* })
         }
 
         pub fn default() -> std::io::Result<Self> {

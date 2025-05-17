@@ -24,44 +24,50 @@ struct B {
 }
 
 #[test]
-fn basic_parsing() {
-    let a = A::default().unwrap();
+fn basic_parsing() -> anyhow::Result<()> {
+    let a = A::default()?;
     assert_eq!(a.option_vec1, None);
+    Ok(())
 }
 
 #[test]
-fn conversion_test() {
-    let b = B::from_hash_map(&A::default().unwrap().into_hash_map()).unwrap();
+fn conversion_test() -> anyhow::Result<()> {
+    let b = B::from(A::default()?).unwrap();
     assert_eq!(b.name_string, "props-util".to_string());
     assert_eq!(b.option_vec1, Some(vec![1, 2, 3]));
     assert_eq!(b.option_vec2, Some(vec![4, 5, 6]));
     assert_eq!(b.option_vec3, None);
+    Ok(())
 }
 
 #[test]
-fn hash_map_test() {
+fn hash_map_test() -> anyhow::Result<()> {
     let mut hm = HashMap::<String, String>::new();
     hm.insert("name".into(), "hash_map_string".into());
     hm.insert("option_vec1".into(), "4,5,6".into());
     hm.insert("option_vec3".into(), "s1, s2, s3".into());
 
-    let b = B::from_hash_map(&hm).unwrap();
+    let b = B::from(hm)?;
     assert_eq!(b.name_string, "hash_map_string".to_string());
     assert_eq!(b.option_vec1, Some(vec![4, 5, 6]));
     assert_eq!(b.option_vec2, Some(vec![1, 2, 3]));
-    assert_eq!(b.option_vec3, Some(vec!["s1".into(), "s2".into(), "s3".into()]))
+    assert_eq!(b.option_vec3, Some(vec!["s1".into(), "s2".into(), "s3".into()]));
+
+    Ok(())
 }
 
 #[test]
-fn file_test() {
+fn file_test() -> anyhow::Result<()> {
     let a = A::from_file("examples/test.properties").unwrap();
     assert_eq!(a.name, "test".to_string());
     assert_eq!(a.option_vec1, Some(vec![8, 9, 10]));
     assert_eq!(a.option_vec2, Some(vec![8, 9, 10]));
 
-    let b = B::from_hash_map(&a.into_hash_map()).unwrap();
+    let b = B::from(a)?;
     assert_eq!(b.name_string, "test".to_string());
     assert_eq!(b.option_vec1, Some(vec![8, 9, 10]));
     assert_eq!(b.option_vec2, Some(vec![8, 9, 10]));
     assert_eq!(b.option_vec3, None);
+
+    Ok(())
 }

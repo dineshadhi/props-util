@@ -112,38 +112,15 @@ optional_port=9090
 # optional_host is not set, so it will be None
 ```
 
-### Converting to and from HashMap
-
-You can convert your struct to a HashMap using the `into_hash_map` method:
-
-```rust
-let config = Config::from_file("config.properties")?;
-let hashmap = config.into_hash_map();
-```
-
-This is particularly useful when you need to:
-- Convert between different configuration types
-- Store the configuration in a different format
-- Pass the configuration to another system that expects a HashMap
-
-When building from a HashMap, the keys and values must be of type `String`:
-
-```rust
-use std::collections::HashMap;
-
-let mut props = HashMap::new();
-props.insert("server.host".to_string(), "192.168.1.100".to_string());
-props.insert("server.port".to_string(), "9999".to_string());
-props.insert("debug.enabled".to_string(), "true".to_string());
-
-let config = Config::from_hash_map(&props)?;
-```
 
 ### Converting Between Different Types
 
-You can use `into_hash_map` to convert between different configuration types. This is particularly useful when you have multiple structs that share similar configuration fields but with different types or structures:
+You can use the `from` function to convert between different configuration types. This is particularly useful when you have multiple structs that share similar configuration fields but with different types or structures:
 
 ```rust
+use props_util::Properties;
+use std::io::Result;
+
 #[derive(Properties, Debug)]
 struct ServerConfig {
     #[prop(key = "host", default = "localhost")]
@@ -160,13 +137,22 @@ struct ClientConfig {
     server_port: u16,
 }
 
-// Convert from ServerConfig to ClientConfig
-let server_config = ServerConfig::from_file("server.properties")?;
-let hashmap = server_config.into_hash_map();
-let client_config = ClientConfig::from_hash_map(&hashmap)?;
+fn main() -> Result<()> {
+    // Create a temporary file for testing
+    let temp_file = tempfile::NamedTempFile::new()?;
+    std::fs::write(&temp_file, "host=example.com\nport=9090")?;
+    
+    // Convert from ServerConfig to ClientConfig using the from function
+    let server_config = ServerConfig::from_file(temp_file.path().to_str().unwrap())?;
+    let client_config = ClientConfig::from(server_config)?;
+    
+    println!("Server host: {}", client_config.server_host);
+    println!("Server port: {}", client_config.server_port);
+    Ok(())
+}
 ```
 
-> **Important**: When converting between types using `into_hash_map`, the `key` attribute values must match between the source and target types. If no `key` is specified, the field names must match. This ensures that the configuration values are correctly mapped between the different types.
+> **Important**: When converting between types using `from`, the `key` attribute values must match between the source and target types. If no `key` is specified, the field names must match. This ensures that the configuration values are correctly mapped between the different types.
 
 This approach is useful when:
 - You need to migrate between different configuration formats
@@ -193,64 +179,6 @@ let config = Config::default()?;
 ```
 
 This will use the default values specified in the `#[prop]` attributes.
-
-### Initialization from HashMap
-
-You can also create an instance directly from a `std::collections::HashMap<&str, &str>`:
-
-```rust
-use std::collections::HashMap;
-
-let mut props = HashMap::new();
-props.insert("server.host", "192.168.1.100");
-props.insert("server.port", "9999");
-props.insert("debug.enabled", "true");
-
-let config = Config::from_hash_map(&props)?;
-```
-
-This method is useful if you already have the configuration data in a HashMap, for example, loaded from a different source or constructed dynamically. Property keys and values are expected to be string slices (`&str`), and type conversion and default values work the same way as `from_file`.
-
-## Advanced Example
-
-Here's a more comprehensive example showing nested configuration:
-
-```rust
-use props_util::Properties;
-
-#[derive(Properties, Debug)]
-struct AppConfig {
-    #[prop(key = "app.name", default = "MyApp")]
-    name: String,
-
-    #[prop(key = "app.version", default = "1.0.0")]
-    version: String,
-
-    #[prop(key = "database.url", default = "postgres://localhost:5432/mydb")]
-    db_url: String,
-
-    #[prop(key = "database.pool_size", default = "10")]
-    db_pool_size: u32,
-
-    #[prop(key = "logging.level", default = "info")]
-    log_level: String,
-
-    #[prop(key = "logging.file", default = "app.log")]
-    log_file: String,
-
-    #[prop(key = "allowed_ips", default = "127.0.0.1,192.168.1.1")]
-    allowed_ips: Vec<String>,
-
-    #[prop(key = "ports", default = "80,443,8080")]
-    ports: Vec<u16>,
-
-    #[prop(key = "enabled_features")] // Required
-    enabled_features: Vec<String>,
-
-    #[prop(key = "optional_ssl_port")] // Optional field
-    optional_ssl_port: Option<u16>,
-}
-```
 
 ## Properties File Format
 
