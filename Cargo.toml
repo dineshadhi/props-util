@@ -9,7 +9,7 @@ description = "A Rust library for easily loading and parsing properties files in
 repository = "https://github.com/dineshadhi/props-util.git"
 license = "MIT"
 keywords = ["util", "properties", "proc-macro"]
-categories = ["util"]
+categories = ["config", "parsing"]
 
 [lib]
 proc-macro = true
