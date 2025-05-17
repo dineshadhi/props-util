@@ -1,9 +1,298 @@
+//! # Props-Util
+//!
+//! A Rust library for easily loading and parsing properties files into strongly-typed structs.
+//!
+//! ## Overview
+//!
+//! Props-Util provides a procedural macro that allows you to derive a `Properties` trait for your structs,
+//! enabling automatic parsing of properties files into your struct fields. This makes configuration
+//! management in Rust applications more type-safe and convenient.
+//!
+//! ## Features
+//!
+//! - Derive macro for automatic properties parsing
+//! - Support for default values
+//! - Type conversion from string to your struct's field types
+//! - Error handling for missing or malformed properties
+//! - Support for both file-based and default initialization
+//!
+//! ## Usage
+//!
+//! ### Basic Example
+//!
+//! ```rust
+//! use props_util::Properties;
+//! use std::io::Result;
+//!
+//! #[derive(Properties, Debug)]
+//! struct Config {
+//!     #[prop(key = "server.host", default = "localhost")]
+//!     host: String,
+//!
+//!     #[prop(key = "server.port", default = "8080")]
+//!     port: u16,
+//!
+//!     #[prop(key = "debug.enabled", default = "false")]
+//!     debug: bool,
+//! }
+//!
+//! fn main() -> Result<()> {
+//!     // Create a temporary file for testing
+//!     let temp_file = tempfile::NamedTempFile::new()?;
+//!     std::fs::write(&temp_file, "server.host=example.com\nserver.port=9090\ndebug.enabled=true")?;
+//!     
+//!     let config = Config::from_file(temp_file.path().to_str().unwrap())?;
+//!     println!("Server: {}:{}", config.host, config.port);
+//!     println!("Debug mode: {}", config.debug);
+//!     Ok(())
+//! }
+//! ```
+//!
+//! ### Attribute Parameters
+//!
+//! The `#[prop]` attribute accepts the following parameters:
+//!
+//! - `key`: The property key to look for in the properties file (optional). If not specified, the field name will be used as the key.
+//! - `default`: A default value to use if the property is not found in the file (optional)
+//!
+//! ### Field Types
+//!
+//! Props-Util supports any type that implements `FromStr`. This includes:
+//!
+//! - `String`
+//! - Numeric types (`u8`, `u16`, `u32`, `u64`, `i8`, `i16`, `i32`, `i64`, `f32`, `f64`)
+//! - Boolean (`bool`)
+//! - `Vec<T>` where `T` implements `FromStr` (values are comma-separated in the properties file)
+//! - `Option<T>` where `T` implements `FromStr` (optional fields that may or may not be present in the properties file)
+//! - Custom types that implement `FromStr`
+//!
+//! ### Example of using Vec and Option types:
+//!
+//! ```rust
+//! use props_util::Properties;
+//! use std::io::Result;
+//!
+//! #[derive(Properties, Debug)]
+//! struct Config {
+//!     #[prop(key = "numbers", default = "1,2,3")]
+//!     numbers: Vec<i32>,
+//!     
+//!     #[prop(key = "strings", default = "hello,world")]
+//!     strings: Vec<String>,
+//!
+//!     #[prop(key = "optional_port")]  // No default needed for Option
+//!     optional_port: Option<u16>,
+//!
+//!     #[prop(key = "optional_host")]  // No default needed for Option
+//!     optional_host: Option<String>,
+//! }
+//!
+//! fn main() -> Result<()> {
+//!     // Create a temporary file for testing
+//!     let temp_file = tempfile::NamedTempFile::new()?;
+//!     std::fs::write(&temp_file, "numbers=4,5,6,7\nstrings=test,vec,parsing\noptional_port=9090")?;
+//!     
+//!     let config = Config::from_file(temp_file.path().to_str().unwrap())?;
+//!     println!("Numbers: {:?}", config.numbers);
+//!     println!("Strings: {:?}", config.strings);
+//!     println!("Optional port: {:?}", config.optional_port);
+//!     println!("Optional host: {:?}", config.optional_host);
+//!     Ok(())
+//! }
+//! ```
+//!
+//! ### Converting to and from HashMap
+//!
+//! You can convert your struct to a HashMap using the `into_hash_map` method:
+//!
+//! ```rust
+//! use props_util::Properties;
+//! use std::io::Result;
+//! use std::collections::HashMap;
+//!
+//! #[derive(Properties, Debug)]
+//! struct Config {
+//!     #[prop(key = "server.host", default = "localhost")]
+//!     host: String,
+//!     #[prop(key = "server.port", default = "8080")]
+//!     port: u16,
+//! }
+//!
+//! fn main() -> Result<()> {
+//!     let mut props = HashMap::new();
+//!     props.insert("server.host".to_string(), "192.168.1.100".to_string());
+//!     props.insert("server.port".to_string(), "9999".to_string());
+//!
+//!     let config = Config::from_hash_map(&props)?;
+//!     let hashmap = config.into_hash_map();
+//!     println!("Host: {}", hashmap.get("server.host").unwrap());
+//!     println!("Port: {}", hashmap.get("server.port").unwrap());
+//!     Ok(())
+//! }
+//! ```
+//!
+//! ### Converting Between Different Types
+//!
+//! You can use `into_hash_map` to convert between different configuration types. This is particularly useful
+//! when you have multiple structs that share similar configuration fields but with different types or structures:
+//!
+//! ```rust
+//! use props_util::Properties;
+//! use std::io::Result;
+//! use std::collections::HashMap;
+//!
+//! #[derive(Properties, Debug)]
+//! struct ServerConfig {
+//!     #[prop(key = "host", default = "localhost")]
+//!     host: String,
+//!     #[prop(key = "port", default = "8080")]
+//!     port: u16,
+//! }
+//!
+//! #[derive(Properties, Debug)]
+//! struct ClientConfig {
+//!     #[prop(key = "host", default = "localhost")]  // Note: using same key as ServerConfig
+//!     server_host: String,
+//!     #[prop(key = "port", default = "8080")]      // Note: using same key as ServerConfig
+//!     server_port: u16,
+//! }
+//!
+//! fn main() -> Result<()> {
+//!     // Create a temporary file for testing
+//!     let temp_file = tempfile::NamedTempFile::new()?;
+//!     std::fs::write(&temp_file, "host=example.com\nport=9090")?;
+//!     
+//!     // Convert from ServerConfig to ClientConfig
+//!     let server_config = ServerConfig::from_file(temp_file.path().to_str().unwrap())?;
+//!     let hashmap = server_config.into_hash_map();
+//!     let client_config = ClientConfig::from_hash_map(&hashmap)?;
+//!     
+//!     println!("Server host: {}", client_config.server_host);
+//!     println!("Server port: {}", client_config.server_port);
+//!     Ok(())
+//! }
+//! ```
+//!
+//! > **Important**: When converting between types using `into_hash_map`, the `key` attribute values must match between the source and target types. If no `key` is specified, the field names must match. This ensures that the configuration values are correctly mapped between the different types.
+//!
+//! This approach is useful when:
+//! - You need to migrate between different configuration formats
+//! - You have multiple applications that share configuration but use different struct layouts
+//! - You want to transform configuration between different versions of your application
+//!
+//! ### Error Handling
+//!
+//! The `from_file` method returns a `std::io::Result<T>`, which will contain:
+//!
+//! - `Ok(T)` if the properties file was successfully parsed
+//! - `Err` with an appropriate error message if:
+//!   - The file couldn't be opened or read
+//!   - A required property is missing (and no default is provided)
+//!   - A property value couldn't be parsed into the expected type
+//!   - The properties file is malformed (e.g., missing `=` character)
+//!
+//! ### Default Initialization
+//!
+//! You can also create an instance with default values without reading from a file:
+//!
+//! ```rust
+//! use props_util::Properties;
+//! use std::io::Result;
+//!
+//! #[derive(Properties, Debug)]
+//! struct Config {
+//!     #[prop(key = "server.host", default = "localhost")]
+//!     host: String,
+//!     #[prop(key = "server.port", default = "8080")]
+//!     port: u16,
+//! }
+//!
+//! fn main() -> Result<()> {
+//!     let config = Config::default()?;
+//!     println!("Host: {}", config.host);
+//!     println!("Port: {}", config.port);
+//!     Ok(())
+//! }
+//! ```
+//!
+//! ## Properties File Format
+//!
+//! The properties file follows a simple key-value format:
+//!
+//! - Each line represents a single property
+//! - The format is `key=value`
+//! - Lines starting with `#` or `!` are treated as comments and ignored
+//! - Empty lines are ignored
+//! - Leading and trailing whitespace around both key and value is trimmed
+//!
+//! Example:
+//!
+//! ```properties
+//! # Application settings
+//! app.name=MyAwesomeApp
+//! app.version=2.1.0
+//!
+//! # Database configuration
+//! database.url=postgres://user:pass@localhost:5432/mydb
+//! database.pool_size=20
+//!
+//! # Logging settings
+//! logging.level=debug
+//! logging.file=debug.log
+//!
+//! # Network settings
+//! allowed_ips=10.0.0.1,10.0.0.2,192.168.0.1
+//! ports=80,443,8080,8443
+//!
+//! # Features
+//! enabled_features=ssl,compression,caching
+//!
+//! # Optional settings
+//! optional_ssl_port=8443
+//! ```
+//!
+//! ## Limitations
+//!
+//! - Only named structs are supported (not tuple structs or enums)
+//! - All fields must have the `#[prop]` attribute
+//! - Properties files must use the `key=value` format
+//! - When using `from_hash_map`, both keys and values must be of type `String`
+
 extern crate proc_macro;
 
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{DeriveInput, Error, Field, LitStr, parse_macro_input, punctuated::Punctuated, token::Comma};
 
+/// Derive macro for automatically implementing properties parsing functionality.
+///
+/// This macro generates implementations for:
+/// - `from_file`: Load properties from a file
+/// - `from_hash_map`: Create instance from a HashMap
+/// - `into_hash_map`: Convert instance to a HashMap
+/// - `default`: Create instance with default values
+///
+/// # Example
+///
+/// ```rust
+/// use props_util::Properties;
+/// use std::io::Result;
+///
+/// #[derive(Properties, Debug)]
+/// struct Config {
+///     #[prop(key = "server.host", default = "localhost")]
+///     host: String,
+///     #[prop(key = "server.port", default = "8080")]
+///     port: u16,
+/// }
+///
+/// fn main() -> Result<()> {
+///     let config = Config::default()?;
+///     println!("Host: {}", config.host);
+///     println!("Port: {}", config.port);
+///     Ok(())
+/// }
+/// ```
 #[proc_macro_derive(Properties, attributes(prop))]
 pub fn parse_prop_derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -31,17 +320,22 @@ fn extract_named_fields(input: &DeriveInput) -> syn::Result<Punctuated<Field, Co
 }
 
 fn generate_field_init_quote(field_type: &syn::Type, field_name: &proc_macro2::Ident, raw_value_str: proc_macro2::TokenStream, key: LitStr, is_option: bool) -> proc_macro2::TokenStream {
+    // Pregenerated token streams to generate values
+    let vec_parsing = quote! { Self::parse_vec::<_>(val).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Error Parsing `{}` with value `{}` {}", #key, val, e)))? };
+    let parsing = quote! { Self::parse(val).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Error Parsing `{}` with value `{}` {}", #key, val, e)))? };
+    let error = quote! { Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("`{}` value is not configured which is required", #key))) };
+
     match field_type {
         syn::Type::Path(tpath) if tpath.path.segments.last().is_some_and(|segment| segment.ident == "Vec") => match is_option {
             false => quote! {
                 #field_name : match #raw_value_str {
-                    Some(val) => Self::parse_vec::<_>(val).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Error Parsing `{}` with value `{}` {}", #key, val, e)))?,
-                    None => return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("`{}` value is not configured. Use default or set it in the .properties file", #key)))
+                    Some(val) => #vec_parsing,
+                    None => return #error
                 }
             },
             true => quote! {
                 #field_name : match #raw_value_str {
-                    Some(val) => Some(Self::parse_vec::<_>(val).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Error Parsing `{}` with value `{}` {}", #key, val, e)))?),
+                    Some(val) => Some(#vec_parsing),
                     None => None
                 }
             },
@@ -49,13 +343,13 @@ fn generate_field_init_quote(field_type: &syn::Type, field_name: &proc_macro2::I
         _ => match is_option {
             false => quote! {
                 #field_name : match #raw_value_str {
-                    Some(val) => Self::parse(val).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Error Parsing `{}` with value `{}` {}", #key, val, e)))?,
-                    None => return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("`{}` value is not configured. Use default or set it in the .properties file", #key)))
+                    Some(val) => #parsing,
+                    None => return #error
                 }
             },
             true => quote! {
                 #field_name : match #raw_value_str {
-                    Some(val) => Some(Self::parse(val).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Error Parsing `{}` with value `{}` {}", #key, val, e)))?),
+                    Some(val) => Some(#parsing),
                     None => None
                 }
             },
@@ -98,6 +392,9 @@ fn generate_field_hm_token_stream(key: LitStr, field_type: &syn::Type, field_nam
     match field_type {
         syn::Type::Path(tpath) if tpath.path.segments.last().is_some_and(|segment| segment.ident == "Vec") => match is_option {
             false => quote! {
+                // When convert to a hashmap, we insert #filed_name and #key. This will be very helpful
+                // when using the resultant Hashmap to construct some other type which may or may not configure key in the props. That type can look up
+                // either #key or #field_name whichever it wants to construct its values.
                 hm.insert(#field_name_str.to_string() ,self.#field_name.iter().map(|s| s.to_string()).collect::<Vec<String>>().join(","));
                 hm.insert(#key.to_string(), self.#field_name.iter().map(|s| s.to_string()).collect::<Vec<String>>().join(","));
             },
@@ -135,9 +432,9 @@ fn generate_hashmap_token_streams(fields: Punctuated<Field, Comma>) -> syn::Resu
             syn::Type::Path(tpath) if tpath.path.segments.last().is_some_and(|segment| segment.ident == "Option") => match tpath.path.segments.last().unwrap().to_owned().arguments {
                 syn::PathArguments::AngleBracketed(arguments) if arguments.args.first().is_some() => match arguments.args.first().unwrap() {
                     syn::GenericArgument::Type(ftype) => generate_field_hm_token_stream(key, ftype, field_name, true),
-                    _ => panic!("Option not configured {field_name} properly"),
+                    _ => return Err(Error::new_spanned(field, "Optional {field_name} is not configured properly")),
                 },
-                _ => panic!("Option not configured {field_name} properly"),
+                _ => return Err(Error::new_spanned(field, "Optional {field_name} not configured properly")),
             },
             _ => generate_field_hm_token_stream(key, field_type, field_name, false),
         };
@@ -237,18 +534,16 @@ fn parse_key_default(field: &syn::Field) -> syn::Result<(LitStr, Option<LitStr>)
 
     // parse the metadata to find `key` and `default` values
     prop_attr.parse_nested_meta(|meta| {
-        if meta.path.is_ident("key") {
-            if key.is_some() {
-                return Err(meta.error("duplicate 'key' parameter"));
-            }
-            key = Some(meta.value()?.parse()?); // value()? gets the = LitStr part
-        } else if meta.path.is_ident("default") {
-            if default.is_some() {
-                return Err(meta.error("duplicate 'default' parameter"));
-            }
-            default = Some(meta.value()?.parse()?);
-        } else {
-            return Err(meta.error(format!("unrecognized parameter '{}' in #[prop] attribute", meta.path.get_ident().map(|i| i.to_string()).unwrap_or_else(|| "<?>".into()))));
+        match () {
+            _ if meta.path.is_ident("key") => match key {
+                Some(_) => return Err(meta.error("duplicate 'key' parameter")),
+                None => key = Some(meta.value()?.parse()?),
+            },
+            _ if meta.path.is_ident("default") => match default {
+                Some(_) => return Err(meta.error("duplicate 'default' parameter")),
+                None => default = Some(meta.value()?.parse()?),
+            },
+            _ => return Err(meta.error(format!("unrecognized parameter '{}' in #[prop] attribute", meta.path.get_ident().map(|i| i.to_string()).unwrap_or_else(|| "<?>".into())))),
         }
         Ok(())
     })?;
