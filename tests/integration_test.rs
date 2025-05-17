@@ -22,6 +22,10 @@ struct TestConfig {
     missing_default: String,
     #[prop(key = "missing_required")] // Required
     missing_required: String,
+    #[prop(key = "option_with_none")]
+    option_with_none: Option<Vec<String>>,
+    #[prop(key = "option_with_numbers", default = "1,2,3")]
+    option_with_numbers: Option<Vec<i32>>,
 }
 
 // Helper struct for default test where all fields need defaults
@@ -43,6 +47,10 @@ struct DefaultableTestConfig {
     missing_default: String,
     #[prop(key = "missing_required", default = "DefaultRequiredValue")] // Default added
     missing_required: String,
+    #[prop(key = "option_with_value", default = "DefaultValue")]
+    option_with_value: Option<String>,
+    #[prop(key = "option_with_vec_string", default = "test,string")]
+    option_with_vec_string: Option<Vec<String>>,
 }
 
 // Test struct for Vec parsing
@@ -56,6 +64,13 @@ struct VecTestConfig {
     required_vec: Vec<u64>,
 }
 // --- Test Functions ---
+
+#[test]
+fn option_default_test() {
+    let config = DefaultableTestConfig::default().unwrap();
+    assert_eq!(config.option_with_value, Some("DefaultValue".into()));
+    assert_eq!(config.option_with_vec_string, Some(vec!["test".into(), "string".into()]));
+}
 
 #[test]
 fn test_from_file_success() {
@@ -72,6 +87,7 @@ fn test_from_file_success() {
     assert_eq!(config.missing_default, "DefaultValue");
     // Adjust this expected value based on your examples/test.properties file
     assert_eq!(config.missing_required, "value_added_to_file");
+    assert_eq!(config.option_with_numbers, Some(vec![7, 6, 3]));
 }
 
 #[test]
@@ -105,6 +121,7 @@ fn test_from_hash_map_success() {
     props.insert("bool_test", "true");
     props.insert("spaced.key", " spaced map value ");
     props.insert("missing_required", "map_provided"); // Required
+    props.insert("option_with_numbers", "4,5,6");
 
     let config = TestConfig::from_hash_map(&props).expect("from_hash_map failed");
 
@@ -116,6 +133,8 @@ fn test_from_hash_map_success() {
     assert_eq!(config.spaced, "spaced map value");
     assert_eq!(config.missing_default, "DefaultValue"); // Default used
     assert_eq!(config.missing_required, "map_provided");
+    assert_eq!(config.option_with_none, None);
+    assert_eq!(config.option_with_numbers, Some(vec![4, 5, 6]));
 }
 
 #[test]
