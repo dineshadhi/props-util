@@ -80,7 +80,7 @@ fn generate_prop_fns(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStrea
             let mut file = File::open(path).map_err(|e| std::io::Error::new(e.kind(), format!("Error opening file {}", path)))?;
             file.read_to_string(&mut content) .map_err(|e| std::io::Error::new(e.kind(), format!("Error Reading File : {}", path)))?;
 
-            let mut propmap = HashMap::<String, String>::new();
+            let mut propmap = std::collections::HashMap::<String, String>::new();
             for (line_num, line) in content.lines().enumerate() {
                 let line = line.trim();
 
@@ -99,7 +99,7 @@ fn generate_prop_fns(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStrea
         }
 
         pub fn from_hash_map(propmap : &std::collections::HashMap<&str, &str>) -> std::io::Result<Self> {
-            let propmap : HashMap<String, String> = propmap.iter().map(|(k, v)| (k.trim().to_string(), v.trim().to_string())).collect();
+            let propmap : std::collections::HashMap<String, String> = propmap.iter().map(|(k, v)| (k.trim().to_string(), v.trim().to_string())).collect();
             Ok(Self { #( #init_arr ),* })
         }
 

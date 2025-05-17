@@ -2,8 +2,6 @@
 
 // Import the derive macro and any other necessary items from the crate
 use props_util::Properties;
-use std::collections::HashMap;
-
 // Define the struct(s) used for testing within the integration test file
 // This struct can now correctly use the Properties macro from the crate.
 #[derive(Properties, Debug, PartialEq)]
@@ -89,7 +87,7 @@ fn test_default_initialization() {
 
 #[test]
 fn test_from_hash_map_success() {
-    let mut props = HashMap::new();
+    let mut props = std::collections::HashMap::new();
     props.insert("name", "NameFromMap");
     props.insert("dept", "DeptFromMap"); // Required
     props.insert("id", "54321");
@@ -112,7 +110,7 @@ fn test_from_hash_map_success() {
 
 #[test]
 fn test_from_hash_map_uses_defaults() {
-    let mut props = HashMap::new();
+    let mut props = std::collections::HashMap::new();
     // Provide only the required fields (those without defaults in TestConfig)
     props.insert("dept", "DeptForDefaults");
     props.insert("missing_required", "RequiredForDefaults");
@@ -131,7 +129,7 @@ fn test_from_hash_map_uses_defaults() {
 
 #[test]
 fn test_from_hash_map_missing_required() {
-    let mut props = HashMap::new();
+    let mut props = std::collections::HashMap::new();
     props.insert("name", "NameFromMap");
     // "dept" is required in TestConfig and is missing
     props.insert("id", "54321");
@@ -145,7 +143,7 @@ fn test_from_hash_map_missing_required() {
 
 #[test]
 fn test_from_hash_map_parse_error() {
-    let mut props = HashMap::new();
+    let mut props = std::collections::HashMap::new();
     props.insert("name", "NameFromMap");
     props.insert("dept", "DeptFromMap");
     props.insert("id", "not_a_number"); // Invalid u32
