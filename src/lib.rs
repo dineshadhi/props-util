@@ -2,27 +2,23 @@ extern crate proc_macro;
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{DeriveInput, Error, LitStr, parse_macro_input};
+use syn::{DeriveInput, Error, Field, LitStr, parse_macro_input, punctuated::Punctuated, token::Comma};
 
 #[proc_macro_derive(Properties, attributes(prop))]
 pub fn parse_prop_derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let struct_name = &input.ident;
-    let prop_impl = match implement_new_prop(&input) {
-        Ok(prop) => prop,
-        Err(e) => return e.to_compile_error().into(),
-    };
 
-    let expanded = quote! {
-        impl #struct_name {
-            #prop_impl
+    match generate_prop_fns(&input) {
+        Ok(prop_impl) => quote! {
+            impl #struct_name { #prop_impl }
         }
-    };
-
-    TokenStream::from(expanded)
+        .into(),
+        Err(e) => e.to_compile_error().into(),
+    }
 }
 
-fn implement_new_prop(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
+fn extract_named_fields(input: &DeriveInput) -> syn::Result<Punctuated<Field, Comma>> {
     let fields = match &input.data {
         syn::Data::Struct(data_struct) => match &data_struct.fields {
             syn::Fields::Named(fields_named) => &fields_named.named,
@@ -31,32 +27,28 @@ fn implement_new_prop(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStre
         _ => return Err(Error::new_spanned(&input.ident, "Only structs can be used on Properties")),
     };
 
-    let mut field_initialisers: Vec<proc_macro2::TokenStream> = Vec::new();
+    Ok(fields.to_owned())
+}
+
+fn generate_initalizers(fields: Punctuated<Field, Comma>) -> syn::Result<Vec<proc_macro2::TokenStream>> {
+    let mut init_arr: Vec<proc_macro2::TokenStream> = Vec::new();
 
     for field in fields {
-        let (key, default) = match parse_prop_attribute(field) {
-            Ok(val) => val,
-            Err(_) => return Err(Error::new_spanned(field, "Expecting `key` and `default` values")),
-        };
-
+        let (key, default) = parse_key_default(&field).map_err(|_| Error::new_spanned(field.clone(), "Expecting `key` and `default` values"))?;
         let field_name = field.ident.as_ref().to_owned().unwrap();
         let field_type = &field.ty;
 
         let raw_value_str = match default {
-            Some(default) => {
-                quote! { propmap.get(#key).map(String::as_str).unwrap_or(#default) }
-            }
-            None => {
-                quote! {
-                    match propmap.get(#key).map(String::as_str) {
-                        Some(val) => val,
-                        None => panic!("`{}` value is not configured. Use default or configure in the .properties file", #key),
-                    }
+            Some(default) => quote! { propmap.get(#key).map(String::as_str).unwrap_or(#default) },
+            None => quote! {
+                match propmap.get(#key).map(String::as_str) {
+                    Some(val) => val,
+                    None => return Err(Error::new_spanned(field, format!("`{}` value is not configured. Use default or set it in the .properties file", #key))),
                 }
-            }
+            },
         };
 
-        let initializer = quote! {
+        let init = quote! {
              #field_name : {
                 let raw_value_str = #raw_value_str;
                 raw_value_str.parse::<#field_type>().map_err(|e|
@@ -65,12 +57,18 @@ fn implement_new_prop(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStre
             }
         };
 
-        field_initialisers.push(initializer);
+        init_arr.push(init);
     }
 
+    Ok(init_arr)
+}
+
+fn generate_prop_fns(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
+    let fields = extract_named_fields(input)?;
+    let init_arr = generate_initalizers(fields)?;
+
     let new_impl = quote! {
-        pub fn new(path : &str) -> std::io::Result<Self> {
-            // Required imports within the generated function
+        pub fn from_file(path : &str) -> std::io::Result<Self> {
             use std::collections::HashMap;
             use std::fs;
             use std::io::{self, ErrorKind}; // Explicitly import ErrorKind
@@ -83,36 +81,37 @@ fn implement_new_prop(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStre
 
             let mut propmap = HashMap::<String, String>::new();
             for (line_num, line) in content.lines().enumerate() {
-                let trimmed_line = line.trim();
+                let line = line.trim();
 
-                if trimmed_line.is_empty() || trimmed_line.starts_with('#') || trimmed_line.starts_with('!') {
+                if line.is_empty() || line.starts_with('#') || line.starts_with('!') {
                     continue;
                 }
 
                 // Find the first '=', handling potential whitespace
-                match trimmed_line.split_once('=') {
+                match line.split_once('=') {
                     Some((key, value)) => propmap.insert(key.trim().to_string(), value.trim().to_string()),
                     None => return Err(io::Error::new( ErrorKind::InvalidData, format!("Malformed line {} in '{}' (missing '='): {}", line_num + 1, path, line) )),
                 };
             }
 
-            Ok(Self {
-                #( #field_initialisers ),*
-            })
+            Ok(Self { #( #init_arr ),* })
+        }
+
+        pub fn default() -> std::io::Result<Self> {
+            use std::collections::HashMap;
+            let mut propmap = HashMap::<String, String>::new();
+            Ok(Self { #( #init_arr ),* })
         }
     };
 
     Ok(proc_macro2::TokenStream::from(new_impl))
 }
 
-fn parse_prop_attribute(field: &syn::Field) -> syn::Result<(LitStr, Option<LitStr>)> {
+fn parse_key_default(field: &syn::Field) -> syn::Result<(LitStr, Option<LitStr>)> {
     let prop_attr = field.attrs.iter().find(|attr| attr.path().is_ident("prop")).ok_or_else(|| {
         syn::Error::new_spanned(
             field.ident.as_ref().unwrap(),
-            format!(
-                "Field '{}' is missing the #[prop(...)] attribute",
-                field.ident.as_ref().map(|i| i.to_string()).unwrap_or_else(|| "<?>".into())
-            ),
+            format!("Field '{}' is missing the #[prop(...)] attribute", field.ident.as_ref().map(|i| i.to_string()).unwrap_or_else(|| "<?>".into())),
         )
     })?;
 
@@ -132,10 +131,7 @@ fn parse_prop_attribute(field: &syn::Field) -> syn::Result<(LitStr, Option<LitSt
             }
             default = Some(meta.value()?.parse()?);
         } else {
-            return Err(meta.error(format!(
-                "unrecognized parameter '{}' in #[prop] attribute",
-                meta.path.get_ident().map(|i| i.to_string()).unwrap_or_else(|| "<?>".into())
-            )));
+            return Err(meta.error(format!("unrecognized parameter '{}' in #[prop] attribute", meta.path.get_ident().map(|i| i.to_string()).unwrap_or_else(|| "<?>".into()))));
         }
         Ok(())
     })?;
