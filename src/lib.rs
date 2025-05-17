@@ -22,6 +22,7 @@
 //!
 //! ```rust
 //! use props_util::Properties;
+//! use std::io::Result;
 //!
 //! #[derive(Properties, Debug)]
 //! struct Config {
@@ -35,8 +36,12 @@
 //!     debug: bool,
 //! }
 //!
-//! fn main() -> std::io::Result<()> {
-//!     let config = Config::from_file("config.properties")?;
+//! fn main() -> Result<()> {
+//!     // Create a temporary file for testing
+//!     let temp_file = tempfile::NamedTempFile::new()?;
+//!     std::fs::write(&temp_file, "server.host=example.com\nserver.port=9090\ndebug.enabled=true")?;
+//!     
+//!     let config = Config::from_file(temp_file.path().to_str().unwrap())?;
 //!     println!("Server: {}:{}", config.host, config.port);
 //!     println!("Debug mode: {}", config.debug);
 //!     Ok(())
@@ -64,6 +69,9 @@
 //! ### Example of using Vec and Option types:
 //!
 //! ```rust
+//! use props_util::Properties;
+//! use std::io::Result;
+//!
 //! #[derive(Properties, Debug)]
 //! struct Config {
 //!     #[prop(key = "numbers", default = "1,2,3")]
@@ -78,6 +86,19 @@
 //!     #[prop(key = "optional_host")]  // No default needed for Option
 //!     optional_host: Option<String>,
 //! }
+//!
+//! fn main() -> Result<()> {
+//!     // Create a temporary file for testing
+//!     let temp_file = tempfile::NamedTempFile::new()?;
+//!     std::fs::write(&temp_file, "numbers=4,5,6,7\nstrings=test,vec,parsing\noptional_port=9090")?;
+//!     
+//!     let config = Config::from_file(temp_file.path().to_str().unwrap())?;
+//!     println!("Numbers: {:?}", config.numbers);
+//!     println!("Strings: {:?}", config.strings);
+//!     println!("Optional port: {:?}", config.optional_port);
+//!     println!("Optional host: {:?}", config.optional_host);
+//!     Ok(())
+//! }
 //! ```
 //!
 //! ### Converting to and from HashMap
@@ -85,26 +106,29 @@
 //! You can convert your struct to a HashMap using the `into_hash_map` method:
 //!
 //! ```rust
-//! let config = Config::from_file("config.properties")?;
-//! let hashmap = config.into_hash_map();
-//! ```
-//!
-//! This is particularly useful when you need to:
-//! - Convert between different configuration types
-//! - Store the configuration in a different format
-//! - Pass the configuration to another system that expects a HashMap
-//!
-//! When building from a HashMap, the keys and values must be of type `String`:
-//!
-//! ```rust
+//! use props_util::Properties;
+//! use std::io::Result;
 //! use std::collections::HashMap;
 //!
-//! let mut props = HashMap::new();
-//! props.insert("server.host".to_string(), "192.168.1.100".to_string());
-//! props.insert("server.port".to_string(), "9999".to_string());
-//! props.insert("debug.enabled".to_string(), "true".to_string());
+//! #[derive(Properties, Debug)]
+//! struct Config {
+//!     #[prop(key = "server.host", default = "localhost")]
+//!     host: String,
+//!     #[prop(key = "server.port", default = "8080")]
+//!     port: u16,
+//! }
 //!
-//! let config = Config::from_hash_map(&props)?;
+//! fn main() -> Result<()> {
+//!     let mut props = HashMap::new();
+//!     props.insert("server.host".to_string(), "192.168.1.100".to_string());
+//!     props.insert("server.port".to_string(), "9999".to_string());
+//!
+//!     let config = Config::from_hash_map(&props)?;
+//!     let hashmap = config.into_hash_map();
+//!     println!("Host: {}", hashmap.get("server.host").unwrap());
+//!     println!("Port: {}", hashmap.get("server.port").unwrap());
+//!     Ok(())
+//! }
 //! ```
 //!
 //! ### Converting Between Different Types
@@ -113,6 +137,10 @@
 //! when you have multiple structs that share similar configuration fields but with different types or structures:
 //!
 //! ```rust
+//! use props_util::Properties;
+//! use std::io::Result;
+//! use std::collections::HashMap;
+//!
 //! #[derive(Properties, Debug)]
 //! struct ServerConfig {
 //!     #[prop(key = "host", default = "localhost")]
@@ -129,10 +157,20 @@
 //!     server_port: u16,
 //! }
 //!
-//! // Convert from ServerConfig to ClientConfig
-//! let server_config = ServerConfig::from_file("server.properties")?;
-//! let hashmap = server_config.into_hash_map();
-//! let client_config = ClientConfig::from_hash_map(&hashmap)?;
+//! fn main() -> Result<()> {
+//!     // Create a temporary file for testing
+//!     let temp_file = tempfile::NamedTempFile::new()?;
+//!     std::fs::write(&temp_file, "host=example.com\nport=9090")?;
+//!     
+//!     // Convert from ServerConfig to ClientConfig
+//!     let server_config = ServerConfig::from_file(temp_file.path().to_str().unwrap())?;
+//!     let hashmap = server_config.into_hash_map();
+//!     let client_config = ClientConfig::from_hash_map(&hashmap)?;
+//!     
+//!     println!("Server host: {}", client_config.server_host);
+//!     println!("Server port: {}", client_config.server_port);
+//!     Ok(())
+//! }
 //! ```
 //!
 //! > **Important**: When converting between types using `into_hash_map`, the `key` attribute values must match between the source and target types. If no `key` is specified, the field names must match. This ensures that the configuration values are correctly mapped between the different types.
@@ -158,10 +196,24 @@
 //! You can also create an instance with default values without reading from a file:
 //!
 //! ```rust
-//! let config = Config::default()?;
-//! ```
+//! use props_util::Properties;
+//! use std::io::Result;
 //!
-//! This will use the default values specified in the `#[prop]` attributes.
+//! #[derive(Properties, Debug)]
+//! struct Config {
+//!     #[prop(key = "server.host", default = "localhost")]
+//!     host: String,
+//!     #[prop(key = "server.port", default = "8080")]
+//!     port: u16,
+//! }
+//!
+//! fn main() -> Result<()> {
+//!     let config = Config::default()?;
+//!     println!("Host: {}", config.host);
+//!     println!("Port: {}", config.port);
+//!     Ok(())
+//! }
+//! ```
 //!
 //! ## Properties File Format
 //!
@@ -224,6 +276,7 @@ use syn::{DeriveInput, Error, Field, LitStr, parse_macro_input, punctuated::Punc
 ///
 /// ```rust
 /// use props_util::Properties;
+/// use std::io::Result;
 ///
 /// #[derive(Properties, Debug)]
 /// struct Config {
@@ -231,6 +284,13 @@ use syn::{DeriveInput, Error, Field, LitStr, parse_macro_input, punctuated::Punc
 ///     host: String,
 ///     #[prop(key = "server.port", default = "8080")]
 ///     port: u16,
+/// }
+///
+/// fn main() -> Result<()> {
+///     let config = Config::default()?;
+///     println!("Host: {}", config.host);
+///     println!("Port: {}", config.port);
+///     Ok(())
 /// }
 /// ```
 #[proc_macro_derive(Properties, attributes(prop))]
