@@ -431,7 +431,7 @@ fn generate_prop_fns(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStrea
         ///
         /// # Example
         ///
-        /// ```rust
+        /// ```rust,no_run
         /// use props_util::Properties;
         /// use std::io::Result;
         ///
@@ -448,6 +448,7 @@ fn generate_prop_fns(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStrea
         /// }
         ///
         /// fn main() -> Result<()> {
+        ///
         ///     let config = Config::from_file("config.properties")?;
         ///     println!("Server: {}:{}", config.host, config.port);
         ///     println!("Debug mode: {}", config.debug);
@@ -496,11 +497,11 @@ fn generate_prop_fns(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStrea
         ///
         /// This function uses `into_hash_map` internally to perform the conversion.
         /// The conversion will succeed only if the source type's keys match this type's keys. All the required keys must be present in the source type.
-        /// 
-        /// 
+        ///
+        ///
         /// # Example
         ///
-        /// ```rust
+        /// ```rust,no_run
         /// use props_util::Properties;
         /// use std::io::Result;
         ///
