@@ -1,4 +1,4 @@
-use props_rs::Properties;
+use props_util::Properties;
 use std::{fs::File, io::Read};
 
 #[derive(Properties, Debug)]
