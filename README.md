@@ -71,7 +71,7 @@ debug.enabled=true
 
 The `#[prop]` attribute accepts the following parameters:
 
-- `key`: The property key to look for in the properties file (required)
+- `key`: The property key to look for in the properties file (optional). If not specified, the field name will be used as the key.
 - `default`: A default value to use if the property is not found in the file (optional)
 
 ### Field Types
@@ -111,6 +111,67 @@ strings=test,vec,parsing
 optional_port=9090
 # optional_host is not set, so it will be None
 ```
+
+### Converting to and from HashMap
+
+You can convert your struct to a HashMap using the `into_hash_map` method:
+
+```rust
+let config = Config::from_file("config.properties")?;
+let hashmap = config.into_hash_map();
+```
+
+This is particularly useful when you need to:
+- Convert between different configuration types
+- Store the configuration in a different format
+- Pass the configuration to another system that expects a HashMap
+
+When building from a HashMap, the keys and values must be of type `String`:
+
+```rust
+use std::collections::HashMap;
+
+let mut props = HashMap::new();
+props.insert("server.host".to_string(), "192.168.1.100".to_string());
+props.insert("server.port".to_string(), "9999".to_string());
+props.insert("debug.enabled".to_string(), "true".to_string());
+
+let config = Config::from_hash_map(&props)?;
+```
+
+### Converting Between Different Types
+
+You can use `into_hash_map` to convert between different configuration types. This is particularly useful when you have multiple structs that share similar configuration fields but with different types or structures:
+
+```rust
+#[derive(Properties, Debug)]
+struct ServerConfig {
+    #[prop(key = "host", default = "localhost")]
+    host: String,
+    #[prop(key = "port", default = "8080")]
+    port: u16,
+}
+
+#[derive(Properties, Debug)]
+struct ClientConfig {
+    #[prop(key = "host", default = "localhost")]  // Note: using same key as ServerConfig
+    server_host: String,
+    #[prop(key = "port", default = "8080")]      // Note: using same key as ServerConfig
+    server_port: u16,
+}
+
+// Convert from ServerConfig to ClientConfig
+let server_config = ServerConfig::from_file("server.properties")?;
+let hashmap = server_config.into_hash_map();
+let client_config = ClientConfig::from_hash_map(&hashmap)?;
+```
+
+> **Important**: When converting between types using `into_hash_map`, the `key` attribute values must match between the source and target types. If no `key` is specified, the field names must match. This ensures that the configuration values are correctly mapped between the different types.
+
+This approach is useful when:
+- You need to migrate between different configuration formats
+- You have multiple applications that share configuration but use different struct layouts
+- You want to transform configuration between different versions of your application
 
 ### Error Handling
 
@@ -226,10 +287,3 @@ enabled_features=ssl,compression,caching
 # Optional settings
 optional_ssl_port=8443
 ```
-
-## Limitations
-
-- Only named structs are supported (not tuple structs or enums)
-- All fields must have the `#[prop]` attribute
-- The `key` parameter is required for all fields
-- Properties files must use the `key=value` format

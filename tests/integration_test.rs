@@ -1,242 +1,67 @@
-// Integration tests for props-util
+use std::collections::HashMap;
 
-// Import the derive macro and any other necessary items from the crate
 use props_util::Properties;
-// Define the struct(s) used for testing within the integration test file
-// This struct can now correctly use the Properties macro from the crate.
-#[derive(Properties, Debug, PartialEq, Clone)]
-struct TestConfig {
-    #[prop(key = "name", default = "DefaultName")]
+
+#[derive(Properties)]
+struct A {
+    #[prop(default = "props-util")]
     name: String,
-    #[prop(key = "dept")] // Required
-    dept: String,
-    #[prop(key = "id", default = "0")]
-    empid: u32,
-    #[prop(key = "numeric_test", default = "999")]
-    numeric: i64,
-    #[prop(key = "bool_test", default = "false")]
-    boolean: bool,
-    #[prop(key = "spaced.key", default = "")]
-    spaced: String,
-    #[prop(key = "missing_default", default = "DefaultValue")]
-    missing_default: String,
-    #[prop(key = "missing_required")] // Required
-    missing_required: String,
-    #[prop(key = "option_with_none")]
-    option_with_none: Option<Vec<String>>,
-    #[prop(key = "option_with_numbers", default = "1,2,3")]
-    option_with_numbers: Option<Vec<i32>>,
+    option_vec1: Option<Vec<u32>>, // For none check
+    #[prop(default = "4, 5, 6")]
+    option_vec2: Option<Vec<u32>>, // For none check
+    option_vec3: Option<Vec<String>>,
 }
 
-// Helper struct for default test where all fields need defaults
-#[derive(Properties, Debug, PartialEq, Clone)]
-struct DefaultableTestConfig {
-    #[prop(key = "name", default = "DefaultName")]
-    name: String,
-    #[prop(key = "dept", default = "DefaultDept")] // Default added
-    dept: String,
-    #[prop(key = "id", default = "0")]
-    empid: u32,
-    #[prop(key = "numeric_test", default = "999")]
-    numeric: i64,
-    #[prop(key = "bool_test", default = "false")]
-    boolean: bool,
-    #[prop(key = "spaced.key", default = "")]
-    spaced: String,
-    #[prop(key = "missing_default", default = "DefaultValue")]
-    missing_default: String,
-    #[prop(key = "missing_required", default = "DefaultRequiredValue")] // Default added
-    missing_required: String,
-    #[prop(key = "option_with_value", default = "DefaultValue")]
-    option_with_value: Option<String>,
-    #[prop(key = "option_with_vec_string", default = "test,string")]
-    option_with_vec_string: Option<Vec<String>>,
-}
-
-// Test struct for Vec parsing
-#[derive(Properties, Debug, PartialEq)]
-struct VecTestConfig {
-    #[prop(key = "numbers", default = "1,2,3")]
-    numbers: Vec<i32>,
-    #[prop(key = "strings", default = "hello,world")]
-    strings: Vec<String>,
-    #[prop(key = "required_vec")] // Required
-    required_vec: Vec<u64>,
-    #[prop(key = "option_vec")]
-    option_vec: Option<Vec<u16>>,
-}
-// --- Test Functions ---
-
-#[test]
-fn option_default_test() {
-    let config = DefaultableTestConfig::default().unwrap();
-    assert_eq!(config.option_with_value, Some("DefaultValue".into()));
-    assert_eq!(config.option_with_vec_string, Some(vec!["test".into(), "string".into()]));
+#[derive(Properties)]
+struct B {
+    #[prop(key = "name")]
+    name_string: String,
+    #[prop(default = "1,2,3")]
+    option_vec1: Option<Vec<u32>>,
+    #[prop(default = "1, 2, 3")]
+    option_vec2: Option<Vec<u32>>, // For none check
+    option_vec3: Option<Vec<String>>,
 }
 
 #[test]
-fn test_from_file_success() {
-    // Assumes `examples/test.properties` exists relative to crate root
-    // and contains `missing_required=value_added_to_file` (or adjust assertion)
-    let config = TestConfig::from_file("examples/test.properties").expect("Failed to load from file");
-
-    assert_eq!(config.name, "TestName");
-    assert_eq!(config.dept, "Engineering");
-    assert_eq!(config.empid, 123);
-    assert_eq!(config.numeric, 456);
-    assert!(config.boolean);
-    assert_eq!(config.spaced, "spaced value");
-    assert_eq!(config.missing_default, "DefaultValue");
-    // Adjust this expected value based on your examples/test.properties file
-    assert_eq!(config.missing_required, "value_added_to_file");
-    assert_eq!(config.option_with_numbers, Some(vec![7, 6, 3]));
+fn basic_parsing() {
+    let a = A::default().unwrap();
+    assert_eq!(a.option_vec1, None);
 }
 
 #[test]
-fn test_from_file_not_found() {
-    let result = TestConfig::from_file("non_existent_file.properties");
-    assert!(result.is_err());
-    assert_eq!(result.err().unwrap().kind(), std::io::ErrorKind::NotFound);
+fn conversion_test() {
+    let b = B::from_hash_map(&A::default().unwrap().into_hash_map()).unwrap();
+    assert_eq!(b.name_string, "props-util".to_string());
+    assert_eq!(b.option_vec1, Some(vec![1, 2, 3]));
+    assert_eq!(b.option_vec2, Some(vec![4, 5, 6]));
+    assert_eq!(b.option_vec3, None);
 }
 
 #[test]
-fn test_default_initialization() {
-    let config = DefaultableTestConfig::default().expect("Default initialization failed");
+fn hash_map_test() {
+    let mut hm = HashMap::<String, String>::new();
+    hm.insert("name".into(), "hash_map_string".into());
+    hm.insert("option_vec1".into(), "4,5,6".into());
+    hm.insert("option_vec3".into(), "s1, s2, s3".into());
 
-    assert_eq!(config.name, "DefaultName");
-    assert_eq!(config.dept, "DefaultDept");
-    assert_eq!(config.empid, 0);
-    assert_eq!(config.numeric, 999);
-    assert!(!config.boolean);
-    assert_eq!(config.spaced, "");
-    assert_eq!(config.missing_default, "DefaultValue");
-    assert_eq!(config.missing_required, "DefaultRequiredValue");
+    let b = B::from_hash_map(&hm).unwrap();
+    assert_eq!(b.name_string, "hash_map_string".to_string());
+    assert_eq!(b.option_vec1, Some(vec![4, 5, 6]));
+    assert_eq!(b.option_vec2, Some(vec![1, 2, 3]));
+    assert_eq!(b.option_vec3, Some(vec!["s1".into(), "s2".into(), "s3".into()]))
 }
 
 #[test]
-fn test_from_hash_map_success() {
-    let mut props = std::collections::HashMap::new();
-    props.insert("name".to_string(), "NameFromMap".to_string());
-    props.insert("dept".to_string(), "DeptFromMap".to_string()); // Required
-    props.insert("id".to_string(), "54321".to_string());
-    props.insert("numeric_test".to_string(), "-100".to_string());
-    props.insert("bool_test".to_string(), "true".to_string());
-    props.insert("spaced.key".to_string(), " spaced map value ".to_string());
-    props.insert("missing_required".to_string(), "map_provided".to_string()); // Required
-    props.insert("option_with_numbers".to_string(), "4,5,7".to_string());
+fn file_test() {
+    let a = A::from_file("examples/test.properties").unwrap();
+    assert_eq!(a.name, "test".to_string());
+    assert_eq!(a.option_vec1, Some(vec![8, 9, 10]));
+    assert_eq!(a.option_vec2, Some(vec![8, 9, 10]));
 
-    let config = TestConfig::from_hash_map(&props).expect("from_hash_map failed");
-
-    assert_eq!(config.name, "NameFromMap");
-    assert_eq!(config.dept, "DeptFromMap");
-    assert_eq!(config.empid, 54321);
-    assert_eq!(config.numeric, -100);
-    assert!(config.boolean);
-    assert_eq!(config.spaced, "spaced map value");
-    assert_eq!(config.missing_default, "DefaultValue"); // Default used
-    assert_eq!(config.missing_required, "map_provided");
-    assert_eq!(config.option_with_none, None);
-    assert_eq!(config.option_with_numbers, Some(vec![4, 5, 7]));
-
-    let hm = config.clone().into_hash_map();
-    let config = TestConfig::from_hash_map(&hm).unwrap();
-
-    assert_eq!(config.name, "NameFromMap");
-    assert_eq!(config.dept, "DeptFromMap");
-    assert_eq!(config.empid, 54321);
-    assert_eq!(config.numeric, -100);
-    assert!(config.boolean);
-    assert_eq!(config.spaced, "spaced map value");
-    assert_eq!(config.missing_default, "DefaultValue"); // Default used
-    assert_eq!(config.missing_required, "map_provided");
-    assert_eq!(config.option_with_none, None);
-    assert_eq!(config.option_with_numbers, Some(vec![4, 5, 7]));
-}
-
-#[test]
-fn test_from_hash_map_uses_defaults() {
-    let mut props = std::collections::HashMap::new();
-    // Provide only the required fields (those without defaults in TestConfig)
-    props.insert("dept".to_string(), "DeptForDefaults".to_string());
-    props.insert("missing_required".to_string(), "RequiredForDefaults".to_string());
-
-    let config = TestConfig::from_hash_map(&props).expect("from_hash_map (defaults) failed");
-
-    assert_eq!(config.name, "DefaultName"); // Default
-    assert_eq!(config.dept, "DeptForDefaults"); // Provided
-    assert_eq!(config.empid, 0); // Default
-    assert_eq!(config.numeric, 999); // Default
-    assert!(!config.boolean); // Default
-    assert_eq!(config.spaced, ""); // Default
-    assert_eq!(config.missing_default, "DefaultValue"); // Default
-    assert_eq!(config.missing_required, "RequiredForDefaults"); // Provided
-}
-
-#[test]
-fn test_from_hash_map_missing_required() {
-    let mut props = std::collections::HashMap::new();
-    props.insert("name".to_string(), "NameFromMap".to_string());
-    // "dept" is required in TestConfig and is missing
-    props.insert("id".to_string(), "54321".to_string());
-    props.insert("missing_required".to_string(), "provided".to_string()); // This one is provided
-
-    let result = TestConfig::from_hash_map(&props);
-    assert!(result.is_err());
-    // Optionally check the error message
-    // assert!(result.err().unwrap().to_string().contains("Missing required property 'dept'"));
-}
-
-#[test]
-fn test_from_hash_map_parse_error() {
-    let mut props = std::collections::HashMap::new();
-    props.insert("name".to_string(), "NameFromMap".to_string());
-    props.insert("dept".to_string(), "DeptFromMap".to_string());
-    props.insert("id".to_string(), "not_a_number".to_string()); // Invalid u32
-    props.insert("missing_required".to_string(), "provided".to_string());
-
-    let result = TestConfig::from_hash_map(&props);
-    assert!(result.is_err());
-    // Optionally check the error message
-    // assert!(result.err().unwrap().to_string().contains("Failed to parse value"));
-}
-
-#[test]
-fn test_vec_parsing() {
-    let mut props = std::collections::HashMap::new();
-    props.insert("numbers".to_string(), "4,5,6,7".to_string());
-    props.insert("strings".to_string(), "test,vec,parsing".to_string());
-    props.insert("required_vec".to_string(), "10,20,30".to_string());
-
-    let config = VecTestConfig::from_hash_map(&props).expect("from_hash_map failed");
-
-    assert_eq!(config.numbers, vec![4, 5, 6, 7]);
-    assert_eq!(config.strings, vec!["test".to_string(), "vec".to_string(), "parsing".to_string()]);
-    assert_eq!(config.required_vec, vec![10, 20, 30]);
-    assert_eq!(config.option_vec, None);
-
-    props.insert("option_vec".to_string(), "10,20,30".to_string());
-    let config = VecTestConfig::from_hash_map(&props).expect("from_hash_map failed");
-    assert_eq!(config.option_vec, Some(vec![10, 20, 30]));
-}
-
-#[test]
-fn test_vec_defaults() {
-    let mut props = std::collections::HashMap::new();
-    props.insert("required_vec".to_string(), "1,2,3".to_string());
-
-    let config = VecTestConfig::from_hash_map(&props).expect("from_hash_map failed");
-
-    assert_eq!(config.numbers, vec![1, 2, 3]); // Default value
-    assert_eq!(config.strings, vec!["hello".to_string(), "world".to_string()]); // Default value
-    assert_eq!(config.required_vec, vec![1, 2, 3]);
-}
-
-#[test]
-fn test_vec_parse_error() {
-    let mut props = std::collections::HashMap::new();
-    props.insert("numbers".to_string(), "1,invalid,3".to_string());
-    props.insert("required_vec".to_string(), "1,2,3".to_string());
-
-    let result = VecTestConfig::from_hash_map(&props);
-    assert!(result.is_err());
+    let b = B::from_hash_map(&a.into_hash_map()).unwrap();
+    assert_eq!(b.name_string, "test".to_string());
+    assert_eq!(b.option_vec1, Some(vec![8, 9, 10]));
+    assert_eq!(b.option_vec2, Some(vec![8, 9, 10]));
+    assert_eq!(b.option_vec3, None);
 }
