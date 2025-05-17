@@ -158,17 +158,21 @@ fn generate_prop_fns(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStrea
 }
 
 fn parse_key_default(field: &syn::Field) -> syn::Result<(LitStr, Option<LitStr>)> {
-    let prop_attr = field.attrs.iter().find(|attr| attr.path().is_ident("prop")).ok_or_else(|| {
-        syn::Error::new_spanned(
-            field.ident.as_ref().unwrap(),
-            format!("Field '{}' is missing the #[prop(...)] attribute", field.ident.as_ref().map(|i| i.to_string()).unwrap_or_else(|| "<?>".into())),
-        )
-    })?;
+    let prop_attr = field.attrs.iter().find(|attr| attr.path().is_ident("prop"));
+    let prop_attr = match prop_attr {
+        Some(attr) => attr,
+        None => {
+            // If there is no "prop" attr, simply return the field name with None default
+            let ident = field.ident.to_owned().unwrap();
+            let key = LitStr::new(&ident.to_string(), ident.span());
+            return Ok((key, None));
+        }
+    };
 
     let mut key: Option<LitStr> = None;
     let mut default: Option<LitStr> = None;
 
-    // Use parse_nested_meta for more robust parsing of attribute arguments
+    // parse the metadata to find `key` and `default` values
     prop_attr.parse_nested_meta(|meta| {
         if meta.path.is_ident("key") {
             if key.is_some() {
@@ -186,8 +190,14 @@ fn parse_key_default(field: &syn::Field) -> syn::Result<(LitStr, Option<LitStr>)
         Ok(())
     })?;
 
-    // Check if key is found
-    let key_str = key.ok_or_else(|| syn::Error::new_spanned(prop_attr, "Missing 'key' parameter in #[prop] attribute"))?;
+    // if there is no key, simple use the ident field name
+    let key_str = match key {
+        Some(key) => key,
+        None => match field.ident.to_owned() {
+            Some(key) => LitStr::new(&key.to_string(), key.span()),
+            None => return Err(syn::Error::new_spanned(prop_attr, "Missing 'key' parameter in #[prop] attribute")),
+        },
+    };
 
     Ok((key_str, default))
 }
