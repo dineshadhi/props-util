@@ -98,6 +98,10 @@ fn generate_prop_fns(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStrea
             Ok(Self { #( #init_arr ),* })
         }
 
+        pub fn from_hash_map(propmap : &std::collections::HashMap<String, String>) -> std::io::Result<Self> {
+            Ok(Self { #( #init_arr ),* })
+        }
+
         pub fn default() -> std::io::Result<Self> {
             use std::collections::HashMap;
             let mut propmap = HashMap::<String, String>::new();
@@ -137,7 +141,7 @@ fn parse_key_default(field: &syn::Field) -> syn::Result<(LitStr, Option<LitStr>)
         Ok(())
     })?;
 
-    // Check if both key and default were found
+    // Check if key is found
     let key_str = key.ok_or_else(|| syn::Error::new_spanned(prop_attr, "Missing 'key' parameter in #[prop] attribute"))?;
 
     Ok((key_str, default))

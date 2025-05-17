@@ -1,4 +1,5 @@
 use props_util::Properties;
+use std::collections::HashMap;
 
 #[derive(Properties, Debug)]
 #[allow(unused)]
@@ -6,7 +7,7 @@ struct TestProp {
     #[prop(key = "name", default = "Dumeel")]
     name: String,
 
-    #[prop(key = "dept", default = "wms")]
+    #[prop(key = "dept")]
     dept: String,
 
     #[prop(key = "id")]
@@ -14,6 +15,9 @@ struct TestProp {
 }
 
 fn main() {
-    let test = TestProp::default().unwrap();
+    let mut hm = HashMap::new();
+    hm.insert("dept".into(), "zvp".into());
+    hm.insert("id".into(), "34".into());
+    let test = TestProp::from_hash_map(&hm).unwrap();
     dbg!(test);
 }
