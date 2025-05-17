@@ -30,7 +30,7 @@ fn extract_named_fields(input: &DeriveInput) -> syn::Result<Punctuated<Field, Co
     Ok(fields.to_owned())
 }
 
-fn generate_result_quote(field_type: &syn::Type, field_name: &proc_macro2::Ident, raw_value_str: proc_macro2::TokenStream, key: LitStr, is_option: bool) -> proc_macro2::TokenStream {
+fn generate_field_init_quote(field_type: &syn::Type, field_name: &proc_macro2::Ident, raw_value_str: proc_macro2::TokenStream, key: LitStr, is_option: bool) -> proc_macro2::TokenStream {
     match field_type {
         syn::Type::Path(tpath) if tpath.path.segments.last().is_some_and(|segment| segment.ident == "Vec") => match is_option {
             false => quote! {
@@ -63,7 +63,7 @@ fn generate_result_quote(field_type: &syn::Type, field_name: &proc_macro2::Ident
     }
 }
 
-fn generate_initalizers(fields: Punctuated<Field, Comma>) -> syn::Result<Vec<proc_macro2::TokenStream>> {
+fn generate_init_token_streams(fields: Punctuated<Field, Comma>) -> syn::Result<Vec<proc_macro2::TokenStream>> {
     let mut init_arr: Vec<proc_macro2::TokenStream> = Vec::new();
 
     for field in fields {
@@ -71,7 +71,7 @@ fn generate_initalizers(fields: Punctuated<Field, Comma>) -> syn::Result<Vec<pro
         let field_name = field.ident.as_ref().to_owned().unwrap();
         let field_type = &field.ty;
 
-        let raw_value_str = match default {
+        let val_token_stream = match default {
             Some(default) => quote! { Some(propmap.get(#key).map(String::as_str).unwrap_or(#default)) },
             None => quote! { propmap.get(#key).map(String::as_str) },
         };
@@ -79,12 +79,12 @@ fn generate_initalizers(fields: Punctuated<Field, Comma>) -> syn::Result<Vec<pro
         let init = match field_type {
             syn::Type::Path(tpath) if tpath.path.segments.last().is_some_and(|segment| segment.ident == "Option") => match tpath.path.segments.last().unwrap().to_owned().arguments {
                 syn::PathArguments::AngleBracketed(arguments) if arguments.args.first().is_some() => match arguments.args.first().unwrap() {
-                    syn::GenericArgument::Type(ftype) => generate_result_quote(ftype, field_name, raw_value_str, key, true),
+                    syn::GenericArgument::Type(ftype) => generate_field_init_quote(ftype, field_name, val_token_stream, key, true),
                     _ => panic!("Option not configured {field_name} properly"),
                 },
                 _ => panic!("Option not configured {field_name} properly"),
             },
-            _ => generate_result_quote(field_type, field_name, raw_value_str, key, false),
+            _ => generate_field_init_quote(field_type, field_name, val_token_stream, key, false),
         };
 
         init_arr.push(init);
@@ -93,9 +93,65 @@ fn generate_initalizers(fields: Punctuated<Field, Comma>) -> syn::Result<Vec<pro
     Ok(init_arr)
 }
 
+fn generate_field_hm_token_stream(key: LitStr, field_type: &syn::Type, field_name: &proc_macro2::Ident, is_option: bool) -> proc_macro2::TokenStream {
+    let field_name_str = field_name.to_string();
+    match field_type {
+        syn::Type::Path(tpath) if tpath.path.segments.last().is_some_and(|segment| segment.ident == "Vec") => match is_option {
+            false => quote! {
+                hm.insert(#field_name_str.to_string() ,self.#field_name.iter().map(|s| s.to_string()).collect::<Vec<String>>().join(","));
+                hm.insert(#key.to_string(), self.#field_name.iter().map(|s| s.to_string()).collect::<Vec<String>>().join(","));
+            },
+            true => quote! {
+                if self.#field_name.is_some() {
+                    hm.insert(#field_name_str.to_string() ,self.#field_name.clone().unwrap().iter().map(|s| s.to_string()).collect::<Vec<String>>().join(","));
+                    hm.insert(#key.to_string() ,self.#field_name.unwrap().iter().map(|s| s.to_string()).collect::<Vec<String>>().join(","));
+                }
+            },
+        },
+        _ => match is_option {
+            false => quote! {
+                hm.insert(#field_name_str.to_string(), self.#field_name.clone().to_string());
+                hm.insert(#key.to_string(), self.#field_name.to_string());
+            },
+            true => quote! {
+                if self.#field_name.is_some() {
+                    hm.insert(#field_name_str.to_string(), self.#field_name.clone().unwrap().to_string());
+                    hm.insert(#key.to_string(), self.#field_name.unwrap().to_string());
+                }
+            },
+        },
+    }
+}
+
+fn generate_hashmap_token_streams(fields: Punctuated<Field, Comma>) -> syn::Result<Vec<proc_macro2::TokenStream>> {
+    let mut init_arr: Vec<proc_macro2::TokenStream> = Vec::new();
+
+    for field in fields {
+        let (key, _) = parse_key_default(&field).map_err(|_| Error::new_spanned(field.clone(), "Expecting `key` and `default` values"))?;
+        let field_name = field.ident.as_ref().to_owned().unwrap();
+        let field_type = &field.ty;
+
+        let quote = match field_type {
+            syn::Type::Path(tpath) if tpath.path.segments.last().is_some_and(|segment| segment.ident == "Option") => match tpath.path.segments.last().unwrap().to_owned().arguments {
+                syn::PathArguments::AngleBracketed(arguments) if arguments.args.first().is_some() => match arguments.args.first().unwrap() {
+                    syn::GenericArgument::Type(ftype) => generate_field_hm_token_stream(key, ftype, field_name, true),
+                    _ => panic!("Option not configured {field_name} properly"),
+                },
+                _ => panic!("Option not configured {field_name} properly"),
+            },
+            _ => generate_field_hm_token_stream(key, field_type, field_name, false),
+        };
+
+        init_arr.push(quote);
+    }
+
+    Ok(init_arr)
+}
+
 fn generate_prop_fns(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     let fields = extract_named_fields(input)?;
-    let init_arr = generate_initalizers(fields)?;
+    let init_arr = generate_init_token_streams(fields.clone())?;
+    let ht_arr = generate_hashmap_token_streams(fields)?;
 
     let new_impl = quote! {
 
@@ -142,9 +198,16 @@ fn generate_prop_fns(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStrea
             Ok(Self { #( #init_arr ),* })
         }
 
-        pub fn from_hash_map(propmap : &std::collections::HashMap<&str, &str>) -> std::io::Result<Self> {
+        pub fn from_hash_map(propmap : &std::collections::HashMap<String, String>) -> std::io::Result<Self> {
             let propmap : std::collections::HashMap<String, String> = propmap.iter().map(|(k, v)| (k.trim().to_string(), v.trim().to_string())).collect();
             Ok(Self { #( #init_arr ),* })
+        }
+
+        pub fn into_hash_map(self) -> std::collections::HashMap<String, String> {
+            use std::collections::HashMap;
+            let mut hm = HashMap::<String, String>::new();
+            #( #ht_arr )*
+            hm
         }
 
         pub fn default() -> std::io::Result<Self> {
