@@ -1,5 +1,6 @@
 [![crates.io](https://img.shields.io/crates/v/props-util)](https://crates.io/crates/props-util)
 [![docs.rs](https://img.shields.io/docsrs/props-util)](https://docs.rs/props-util/)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/dineshadhi/props-util)
 
 # Props-Util
 
