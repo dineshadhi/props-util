@@ -73,6 +73,45 @@ The `#[prop]` attribute accepts the following parameters:
 
 - `key`: The property key to look for in the properties file (optional). If not specified, the field name will be used as the key.
 - `default`: A default value to use if the property is not found in the file (optional)
+- `env`: The environment variable name to look for (optional). If the environment variable is set, its value will be used instead of the value from the properties file.
+
+### Example of using environment variables:
+
+```rust
+use props_util::Properties;
+use std::io::Result;
+
+#[derive(Properties, Debug)]
+struct Config {
+    #[prop(key = "server.host", env = "SERVER_HOST", default = "localhost")]
+    host: String,
+
+    #[prop(key = "server.port", env = "SERVER_PORT", default = "8080")]
+    port: u16,
+
+    #[prop(key = "api.key", env = "API_KEY")]  // No default, must be set in env or props file
+    api_key: String,
+}
+
+fn main() -> Result<()> {
+    // Set environment variables for testing
+    std::env::set_var("SERVER_HOST", "env.example.com");
+    std::env::set_var("SERVER_PORT", "9090");
+    
+    // Create a properties file with different values
+    let temp_file = tempfile::NamedTempFile::new()?;
+    std::fs::write(&temp_file, "server.host=file.example.com\nserver.port=8080\napi.key=test123")?;
+    
+    let config = Config::from_file(temp_file.path().to_str().unwrap())?;
+    
+    // Environment variables take precedence over file values
+    println!("Host: {}", config.host);  // Will print "env.example.com"
+    println!("Port: {}", config.port);  // Will print "9090"
+    println!("API Key: {}", config.api_key);  // Will print "test123" (from file)
+    
+    Ok(())
+}
+```
 
 ### Field Types
 

@@ -283,8 +283,8 @@ fn extract_named_fields(input: &DeriveInput) -> syn::Result<Punctuated<Field, Co
 
 fn generate_field_init_quote(field_type: &syn::Type, field_name: &proc_macro2::Ident, raw_value_str: proc_macro2::TokenStream, key: LitStr, is_option: bool) -> proc_macro2::TokenStream {
     // Pregenerated token streams to generate values
-    let vec_parsing = quote! { Self::parse_vec::<_>(val).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Error Parsing `{}` with value `{}` {}", #key, val, e)))? };
-    let parsing = quote! { Self::parse(val).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Error Parsing `{}` with value `{}` {}", #key, val, e)))? };
+    let vec_parsing = quote! { Self::parse_vec::<_>(&val).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Error Parsing `{}` with value `{}` {}", #key, val, e)))? };
+    let parsing = quote! { Self::parse(&val).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Error Parsing `{}` with value `{}` {}", #key, val, e)))? };
     let error = quote! { Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("`{}` value is not configured which is required", #key))) };
 
     match field_type {
@@ -323,13 +323,18 @@ fn generate_init_token_streams(fields: Punctuated<Field, Comma>) -> syn::Result<
     let mut init_arr: Vec<proc_macro2::TokenStream> = Vec::new();
 
     for field in fields {
-        let (key, default) = parse_key_default(&field).map_err(|_| Error::new_spanned(field.clone(), "Expecting `key` and `default` values"))?;
+        let (key, is_env, default) = parse_key_default(&field).map_err(|_| Error::new_spanned(field.clone(), "Expecting `key` and `default` values"))?;
         let field_name = field.ident.as_ref().to_owned().unwrap();
         let field_type = &field.ty;
 
         let val_token_stream = match default {
-            Some(default) => quote! { Some(propmap.get(#key).map(String::as_str).unwrap_or(#default)) },
-            None => quote! { propmap.get(#key).map(String::as_str) },
+            Some(default) => quote! { Some(propmap.get(#key).map(String::to_string).unwrap_or(#default.to_string())) },
+            None => quote! { propmap.get(#key).map(String::to_string) },
+        };
+
+        let val_token_stream = match is_env {
+            Some(env_key) => quote! { std::env::var(#env_key).map(|val| Some(val)).unwrap_or(#val_token_stream) },
+            None => val_token_stream,
         };
 
         let init = match field_type {
@@ -386,7 +391,7 @@ fn generate_hashmap_token_streams(fields: Punctuated<Field, Comma>) -> syn::Resu
     let mut init_arr: Vec<proc_macro2::TokenStream> = Vec::new();
 
     for field in fields {
-        let (key, _) = parse_key_default(&field).map_err(|_| Error::new_spanned(field.clone(), "Expecting `key` and `default` values"))?;
+        let (key, _, _) = parse_key_default(&field).map_err(|e| Error::new_spanned(field.clone(), format!("Error parsing prop {e}")))?;
         let field_name = field.ident.as_ref().to_owned().unwrap();
         let field_type = &field.ty;
 
@@ -547,7 +552,7 @@ fn generate_prop_fns(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStrea
     Ok(new_impl)
 }
 
-fn parse_key_default(field: &syn::Field) -> syn::Result<(LitStr, Option<LitStr>)> {
+fn parse_key_default(field: &syn::Field) -> syn::Result<(LitStr, Option<LitStr>, Option<LitStr>)> {
     let prop_attr = field.attrs.iter().find(|attr| attr.path().is_ident("prop"));
     let prop_attr = match prop_attr {
         Some(attr) => attr,
@@ -555,12 +560,13 @@ fn parse_key_default(field: &syn::Field) -> syn::Result<(LitStr, Option<LitStr>)
             // If there is no "prop" attr, simply return the field name with None default
             let ident = field.ident.to_owned().unwrap();
             let key = LitStr::new(&ident.to_string(), ident.span());
-            return Ok((key, None));
+            return Ok((key, None, None));
         }
     };
 
     let mut key: Option<LitStr> = None;
     let mut default: Option<LitStr> = None;
+    let mut env: Option<LitStr> = None;
 
     // parse the metadata to find `key` and `default` values
     prop_attr.parse_nested_meta(|meta| {
@@ -572,6 +578,10 @@ fn parse_key_default(field: &syn::Field) -> syn::Result<(LitStr, Option<LitStr>)
             _ if meta.path.is_ident("default") => match default {
                 Some(_) => return Err(meta.error("duplicate 'default' parameter")),
                 None => default = Some(meta.value()?.parse()?),
+            },
+            _ if meta.path.is_ident("env") => match env {
+                Some(_) => return Err(meta.error("duplicate `env` parameter")),
+                None => env = Some(meta.value()?.parse()?),
             },
             _ => return Err(meta.error(format!("unrecognized parameter '{}' in #[prop] attribute", meta.path.get_ident().map(|i| i.to_string()).unwrap_or_else(|| "<?>".into())))),
         }
@@ -587,5 +597,5 @@ fn parse_key_default(field: &syn::Field) -> syn::Result<(LitStr, Option<LitStr>)
         },
     };
 
-    Ok((key_str, default))
+    Ok((key_str, env, default))
 }

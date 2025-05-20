@@ -71,3 +71,54 @@ fn file_test() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[derive(Properties)]
+struct EnvTest {
+    #[prop(env = "NAME", default = "props-util")]
+    name: String,
+}
+
+#[test]
+fn env_test() -> anyhow::Result<()> {
+    let t = EnvTest::default()?;
+    assert_eq!(t.name, "props-util".to_string());
+
+    unsafe {
+        std::env::set_var("NAME", "changed-name");
+    }
+
+    let t = EnvTest::default()?;
+    assert_eq!(t.name, "changed-name");
+
+    Ok(())
+}
+
+#[derive(Properties, Debug)]
+struct EnvFailTest {
+    #[prop(env = "NAME_FAIL")]
+    name: String,
+}
+
+#[test]
+fn env_fail_test() -> anyhow::Result<()> {
+    let t = EnvFailTest::default();
+    assert!(t.is_err());
+
+    let t = EnvFailTest::from_file("examples/test.properties")?;
+    assert_eq!(t.name, "test".to_string());
+
+    let mut hm = HashMap::<String, String>::new();
+    hm.insert("name".into(), "test".into());
+
+    let t = EnvFailTest::from(hm)?;
+    assert_eq!(t.name, "test".to_string());
+
+    unsafe {
+        std::env::set_var("NAME_FAIL", "changed-name");
+    }
+
+    let t = EnvFailTest::default()?;
+    assert_eq!(t.name, "changed-name");
+
+    Ok(())
+}
